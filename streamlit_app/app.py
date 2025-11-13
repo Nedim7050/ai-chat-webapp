@@ -205,15 +205,40 @@ def is_pharma_question(message_lower: str) -> bool:
     return has_keyword or (has_drug_name and is_question)
 
 def get_pharma_specific_answer(message_lower: str):
-    """Get specific pre-defined answers for common pharma questions"""
+    """Get specific pre-defined answers for common pharma questions - EXPANDED"""
+    # Amoxicilline - specific questions (HIGHEST PRIORITY)
     if 'amoxicilline' in message_lower or 'amoxicillin' in message_lower:
-        if any(word in message_lower for word in ['fonctionne', 'fonctionnement', 'comment', 'how', 'mécanisme', 'mechanism', 'action']):
+        if any(word in message_lower for word in ['fonctionne', 'fonctionnement', 'comment', 'how', 'mécanisme', 'mechanism', 'action', 'works']):
             return "L'Amoxicilline est un antibiotique de la famille des bêta-lactamines (pénicillines). Son mécanisme d'action consiste à inhiber la synthèse de la paroi cellulaire bactérienne en se liant aux protéines de liaison aux pénicillines (PBP). Cela empêche la formation de la paroi cellulaire, entraînant la lyse et la mort des bactéries. L'Amoxicilline est efficace contre de nombreuses bactéries Gram-positives et certaines Gram-négatives. Elle est utilisée pour traiter diverses infections : respiratoires, urinaires, cutanées, et dentaires."
-        if any(word in message_lower for word in ['effet', 'side effect', 'indésirable', 'adverse']):
+        if any(word in message_lower for word in ['effet', 'side effect', 'indésirable', 'adverse', 'secondaire']):
             return "Les effets secondaires les plus fréquents de l'Amoxicilline incluent :\n• Troubles digestifs : nausées, vomissements, diarrhée\n• Réactions cutanées : éruptions, urticaire\n• Réactions allergiques (plus rares) : anaphylaxie chez les personnes allergiques aux pénicillines\n• Candidose buccale ou vaginale (surinfection fongique)\n\nLes effets graves sont rares mais peuvent inclure des réactions anaphylactiques. En cas de réaction allergique, arrêtez le traitement et consultez immédiatement un professionnel de santé."
-        if any(word in message_lower for word in ['posologie', 'dosage', 'dose', 'prendre', 'take']):
+        if any(word in message_lower for word in ['posologie', 'dosage', 'dose', 'prendre', 'take', 'utiliser', 'use']):
             return "La posologie de l'Amoxicilline varie selon l'infection :\n• Adultes : généralement 500 mg à 1 g, 3 fois par jour\n• Enfants : 20-50 mg/kg/jour en 3 prises\n• Infections sévères : jusqu'à 3 g par jour en 3 prises\n• Durée : généralement 5 à 10 jours selon l'infection\n\nLa posologie exacte doit être déterminée par un professionnel de santé selon l'infection, l'âge, le poids, et la fonction rénale du patient."
+        if any(word in message_lower for word in ['indication', 'utilisé', 'used', 'traitement', 'treatment', 'pour', 'for']):
+            return "L'Amoxicilline est indiquée pour le traitement de diverses infections bactériennes :\n• Infections respiratoires : pneumonie, bronchite, sinusite\n• Infections urinaires : cystite, pyélonéphrite\n• Infections cutanées et des tissus mous\n• Infections dentaires et buccales\n• Otite moyenne\n• Infections gynécologiques\n\nElle est efficace contre de nombreuses bactéries Gram-positives (streptocoques, staphylocoques sensibles) et certaines Gram-négatives."
+        # Generic Amoxicilline answer
         return "L'Amoxicilline est un antibiotique bêta-lactamine de la famille des pénicillines, largement utilisé pour traiter les infections bactériennes. Elle agit en inhibant la synthèse de la paroi cellulaire bactérienne. Les indications courantes incluent les infections respiratoires, urinaires, cutanées, et dentaires. Les effets secondaires fréquents sont les troubles digestifs et les réactions cutanées. La posologie varie selon l'infection et doit être prescrite par un professionnel de santé."
+    
+    # General medication mechanism questions
+    if any(word in message_lower for word in ['fonctionne', 'fonctionnement', 'comment', 'how', 'mécanisme', 'mechanism', 'works']) and any(word in message_lower for word in ['médicament', 'medicament', 'drug', 'antibiotique', 'antibiotic', 'pharmaceutique']):
+        return "Les médicaments fonctionnent selon différents mécanismes d'action selon leur classe :\n• Antibiotiques : inhibent la croissance ou tuent les bactéries en ciblant des structures spécifiques (paroi cellulaire, ADN, protéines)\n• Anti-inflammatoires : réduisent l'inflammation en inhibant les médiateurs inflammatoires\n• Analgésiques : soulagent la douleur en agissant sur les récepteurs de la douleur\n• Antihypertenseurs : abaissent la tension artérielle en agissant sur le système cardiovasculaire\n\nChaque médicament a un mécanisme spécifique qui cible des processus biologiques particuliers dans l'organisme. Pour des informations précises sur un médicament spécifique, pouvez-vous me donner son nom?"
+    
+    # Effects side effects - general
+    if any(word in message_lower for word in ['effet secondaire', 'side effect', 'effet indésirable', 'adverse', 'effets']) and any(word in message_lower for word in ['médicament', 'medicament', 'drug', 'pharmaceutique']):
+        return "Les effets secondaires des médicaments varient selon le principe actif et la classe thérapeutique. Les effets les plus fréquents incluent : troubles digestifs (nausées, diarrhée), réactions cutanées, maux de tête, et fatigue. Les effets graves sont plus rares mais peuvent inclure des réactions allergiques, des troubles hépatiques, ou des problèmes cardiaques. Pour des informations précises sur les effets secondaires d'un médicament spécifique, pouvez-vous me donner son nom?"
+    
+    # Dosage questions - general
+    if any(word in message_lower for word in ['posologie', 'dosage', 'dose', 'prendre', 'utiliser']) and any(word in message_lower for word in ['médicament', 'medicament', 'drug', 'pharmaceutique']):
+        return "La posologie d'un médicament dépend de plusieurs facteurs :\n• Le type d'infection ou de condition traitée\n• L'âge et le poids du patient\n• La fonction rénale et hépatique\n• Les interactions médicamenteuses\n• La sévérité de la condition\n\nPour des informations précises sur la posologie d'un médicament spécifique, consultez la notice du médicament ou un professionnel de santé."
+    
+    # Interaction questions
+    if any(word in message_lower for word in ['interaction', 'interagit', 'compatible', 'compatibilité']):
+        return "Les interactions médicamenteuses peuvent survenir lorsque deux médicaments ou plus sont pris simultanément. Les interactions peuvent :\n• Augmenter ou diminuer l'efficacité d'un médicament\n• Augmenter le risque d'effets secondaires\n• Créer de nouveaux effets indésirables\n\nPour vérifier les interactions d'un médicament spécifique, consultez la notice du médicament, un pharmacien, ou un professionnel de santé."
+    
+    # Contraindication questions
+    if any(word in message_lower for word in ['contre-indication', 'contraindication', 'contre indication', 'ne pas', 'interdit']):
+        return "Les contre-indications sont des situations où un médicament ne doit pas être utilisé. Les contre-indications courantes incluent :\n• Allergies connues au médicament ou à ses composants\n• Grossesse ou allaitement (pour certains médicaments)\n• Insuffisance rénale ou hépatique sévère\n• Interactions avec d'autres médicaments\n• Certaines conditions médicales préexistantes\n\nPour connaître les contre-indications d'un médicament spécifique, consultez la notice ou un professionnel de santé."
+    
     return None
 
 def is_incoherent(text: str) -> bool:
@@ -263,7 +288,8 @@ def generate_reply(pipeline_obj, message, history):
             if domain_reply:
                 return domain_reply
         
-        # For pharma questions, use pre-defined answers first
+        # For pharma questions, ALWAYS use pre-defined answers first (most reliable)
+        # Skip model generation for pharma questions to avoid incoherent responses
         if is_pharma:
             specific_answer = get_pharma_specific_answer(message_lower)
             if specific_answer:
@@ -271,10 +297,13 @@ def generate_reply(pipeline_obj, message, history):
                 if history:
                     recent_assistant_messages = [msg.get("content", "").strip() for msg in history[-5:] if msg.get("role") == "assistant"]
                     if specific_answer in recent_assistant_messages:
-                        return f"Comme mentionné précédemment, {specific_answer[:100]}... Pour plus de détails, pouvez-vous préciser votre question?"
+                        return "J'ai déjà répondu à cette question précédemment. Pourriez-vous poser une question différente ou plus précise sur le même sujet?"
                 return specific_answer
+            
+            # If no specific answer but it's pharma, use intelligent fallback directly
+            return generate_domain_fallback(message)
         
-        # Try generation with validation (max 2 attempts)
+        # For non-pharma questions, try generation with validation (max 2 attempts)
         max_attempts = 2
         for attempt in range(max_attempts):
             try:
@@ -319,14 +348,9 @@ def generate_reply(pipeline_obj, message, history):
                     # VERY STRICT validation - reject incoherent responses
                     if (not _is_repetitive(reply) and 
                         _is_valid_response(reply) and
-                        not is_incoherent(reply)):
-                        if is_pharma:
-                            # For pharma questions, accept if not clearly off-topic
-                            if not is_clearly_off_topic(reply):
-                                return reply
-                        else:
-                            if is_domain_related(reply):
-                                return reply
+                        not is_incoherent(reply) and
+                        is_domain_related(reply)):
+                        return reply
                     # If invalid and not last attempt, try again
                     if attempt < max_attempts - 1:
                         continue
