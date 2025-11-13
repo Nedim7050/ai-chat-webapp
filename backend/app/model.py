@@ -131,6 +131,13 @@ class ChatModel:
         
         message_lower = message.lower().strip()
         
+        # Check if this exact question was already asked (prevent repetition)
+        if history:
+            recent_user_messages = [msg.get("content", "").lower().strip() for msg in history[-10:] if msg.get("role") == "user"]
+            if message_lower in recent_user_messages:
+                # Same question asked recently - return a variation or acknowledge
+                return "Vous avez déjà posé cette question. Pourriez-vous reformuler ou préciser votre demande?"
+        
         # Check if message is clearly pharmaceutique - if yes, try model generation first
         is_pharma_question = self._is_pharma_question(message_lower)
         
@@ -145,6 +152,12 @@ class ChatModel:
         if is_pharma_question:
             specific_answer = self._get_pharma_specific_answer(message_lower)
             if specific_answer:
+                # Check if we already gave this exact answer recently
+                if history:
+                    recent_assistant_messages = [msg.get("content", "").strip() for msg in history[-5:] if msg.get("role") == "assistant"]
+                    if specific_answer in recent_assistant_messages:
+                        # Already gave this answer - provide a variation
+                        return f"Comme mentionné précédemment, {specific_answer[:100]}... Pour plus de détails, pouvez-vous préciser votre question?"
                 return specific_answer
         
         # Try model generation ONLY if no specific answer found
