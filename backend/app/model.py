@@ -136,17 +136,24 @@ class ChatModel:
         if domain_reply:
             return domain_reply
         
-        # Try model generation, but with strict validation
+        # Try model generation - be more permissive for pharma questions
         # First, try direct model generation if available
         if self.model is not None and self.tokenizer is not None:
             try:
                 reply = self._generate_with_model(message, history)
-                # Validate reply - if valid and domain-related, return it
+                # Validate reply - be more permissive for pharma questions
                 if reply and isinstance(reply, str) and reply.strip():
                     if self._is_valid_response(reply) and not self._is_repetitive(reply):
-                        # Ensure reply is domain-related, otherwise use fallback
-                        if self._is_domain_related(reply):
-                            return reply
+                        # If question is pharma-related, accept reply even if it doesn't have explicit keywords
+                        # Only reject if reply is clearly off-topic
+                        if is_pharma_question:
+                            # For pharma questions, accept if not clearly off-topic
+                            if not self._is_clearly_off_topic(reply):
+                                return reply
+                        else:
+                            # For non-pharma questions, check domain relation
+                            if self._is_domain_related(reply):
+                                return reply
             except Exception as e:
                 print(f"Error in _generate_with_model: {str(e)}")
                 import traceback
@@ -156,20 +163,23 @@ class ChatModel:
         if self.pipeline is not None:
             try:
                 reply = self._generate_with_pipeline(message, history)
-                # Validate reply - if valid and domain-related, return it
+                # Validate reply - be more permissive for pharma questions
                 if reply and isinstance(reply, str) and reply.strip():
                     if self._is_valid_response(reply) and not self._is_repetitive(reply):
-                        # Ensure reply is domain-related, otherwise use fallback
-                        if self._is_domain_related(reply):
-                            return reply
+                        # If question is pharma-related, accept reply even if it doesn't have explicit keywords
+                        if is_pharma_question:
+                            if not self._is_clearly_off_topic(reply):
+                                return reply
+                        else:
+                            if self._is_domain_related(reply):
+                                return reply
             except Exception as e:
                 print(f"Error in _generate_with_pipeline: {str(e)}")
                 import traceback
                 traceback.print_exc()
         
-        # If all attempts failed or returned invalid responses, use domain-specific fallback
-        # This ensures we always return a domain-appropriate response
-        return self._generate_domain_fallback(message)
+        # If all attempts failed, use intelligent domain-specific fallback
+        return self._generate_intelligent_fallback(message, is_pharma_question)
     
     def _generate_with_model(self, message: str, history: List[Dict[str, str]]) -> str:
         """Generate reply using direct model inference with domain-specific context"""
@@ -322,15 +332,43 @@ class ChatModel:
             # Return empty string to trigger fallback
             return ""
     
+    def _is_pharma_question(self, message_lower: str) -> bool:
+        """Check if question is clearly pharmaceutique/medical"""
+        pharma_keywords = [
+            # Medications
+            'médicament', 'medicament', 'drug', 'molecule', 'principe actif', 'posologie', 'dosage',
+            'antibiotique', 'antibiotic', 'amoxicilline', 'amoxicillin', 'paracétamol', 'paracetamol',
+            'aspirine', 'aspirin', 'ibuprofène', 'ibuprofen', 'médicament', 'pillule', 'comprimé',
+            # Medical terms
+            'effet secondaire', 'side effect', 'effet indésirable', 'adverse', 'contre-indication',
+            'indication', 'contraindication', 'interaction', 'pharmacocinétique', 'pharmacodynamie',
+            'posologie', 'dosage', 'administration', 'voie d\'administration',
+            # Medical devices
+            'dispositif médical', 'dispositif medical', 'medical device', 'medtech',
+            # Clinical
+            'essai clinique', 'clinical trial', 'étude clinique', 'phase', 'rct',
+            # Regulation
+            'réglementation', 'regulation', 'fda', 'ema', 'ansm', 'amm', 'autorisation',
+            # Research
+            'recherche', 'research', 'développement', 'development', 'r&d',
+            # Safety
+            'pharmacovigilance', 'sécurité', 'safety', 'surveillance', 'toxicité',
+            # Biotech
+            'biotechnologie', 'biotechnology', 'biotech', 'biologique', 'biologic',
+            # General health/pharma
+            'santé', 'health', 'médical', 'medical', 'thérapeutique', 'therapeutic', 'thérapie'
+        ]
+        return any(keyword in message_lower for keyword in pharma_keywords)
+    
     def _get_domain_specific_response(self, message_lower: str) -> Optional[str]:
-        """Get domain-specific response for common Pharma/MedTech questions"""
+        """Get domain-specific response ONLY for greetings or very general questions"""
         
-        # Greetings
+        # Greetings - return immediately
         if message_lower in ['bonjour', 'salut', 'hello', 'hi', 'bonsoir', 'bonne journée']:
             return "Bonjour! Je suis un assistant spécialisé dans le domaine pharmaceutique et de la santé (Pharma/MedTech). Je peux vous aider avec des questions sur les médicaments, les dispositifs médicaux, la recherche pharmaceutique, la réglementation, les essais cliniques, et les innovations en santé. Comment puis-je vous aider aujourd'hui?"
         
-        # Medications/Drugs
-        if any(word in message_lower for word in ['médicament', 'medicament', 'drug', 'molecule', 'principe actif', 'posologie', 'dosage']):
+        # Very general questions about medications (without specific drug names)
+        if any(word in message_lower for word in ['médicament', 'medicament', 'drug']) and not any(word in message_lower for word in ['quel', 'quels', 'quelle', 'quelles', 'comment', 'pourquoi', 'qu\'est', 'what', 'how', 'why']):
             return "Je peux vous aider avec des questions sur les médicaments! Voici ce que je peux faire :\n• Expliquer les principes actifs et mécanismes d'action\n• Discuter de la posologie et des dosages\n• Informer sur les interactions médicamenteuses\n• Parler de la pharmacocinétique et pharmacodynamie\n\nQuelle question avez-vous sur les médicaments?"
         
         # Medical devices
@@ -363,26 +401,50 @@ class ChatModel:
         
         return None
     
-    def _generate_domain_fallback(self, message: str) -> str:
-        """Generate a domain-specific fallback response"""
+    def _is_clearly_off_topic(self, text: str) -> bool:
+        """Check if text is clearly off-topic (not pharma/medical)"""
+        if not text or len(text) < 3:
+            return False
+        
+        text_lower = text.lower()
+        # Off-topic keywords that would indicate the response is not pharma-related
+        off_topic_keywords = [
+            'cuisine', 'cooking', 'recette', 'recipe', 'restaurant',
+            'sport', 'football', 'basketball', 'tennis',
+            'musique', 'music', 'film', 'movie', 'cinéma',
+            'voyage', 'travel', 'vacances', 'vacation',
+            'cv', 'curriculum', 'lettre de motivation', 'cover letter',
+            'informatique', 'computer', 'programmation', 'programming',
+            'voiture', 'car', 'automobile'
+        ]
+        
+        # If response contains off-topic keywords and no pharma keywords, it's off-topic
+        has_off_topic = any(keyword in text_lower for keyword in off_topic_keywords)
+        has_pharma = self._is_domain_related(text)
+        
+        return has_off_topic and not has_pharma
+    
+    def _generate_intelligent_fallback(self, message: str, is_pharma: bool) -> str:
+        """Generate intelligent fallback that doesn't repeat"""
         message_lower = message.lower().strip()
         
-        # Check if it's domain-related
-        domain_keywords = [
-            'médicament', 'medicament', 'drug', 'pharma', 'pharmaceutique',
-            'dispositif médical', 'dispositif medical', 'medical device', 'medtech',
-            'essai clinique', 'clinical trial', 'étude clinique',
-            'réglementation', 'regulation', 'fda', 'ema', 'ansm',
-            'recherche', 'research', 'développement', 'development', 'r&d',
-            'pharmacovigilance', 'effet indésirable', 'side effect',
-            'biotechnologie', 'biotechnology', 'biotech', 'thérapie génique',
-            'santé', 'health', 'médical', 'medical', 'thérapeutique'
-        ]
-        if any(keyword in message_lower for keyword in domain_keywords):
-            return f"Je comprends que vous parlez de '{message}'. Pour mieux vous aider dans le domaine pharmaceutique et de la santé (Pharma/MedTech), pouvez-vous être plus précis? Par exemple :\n• Quelle question avez-vous sur les médicaments ou dispositifs médicaux?\n• Souhaitez-vous des informations sur la réglementation?\n• Avez-vous des questions sur les essais cliniques ou la recherche?"
+        # If it's a pharma question but model failed, provide helpful context
+        if is_pharma:
+            # Extract key terms from the question
+            if 'effet' in message_lower or 'side effect' in message_lower:
+                return "Les effets secondaires des médicaments varient selon le principe actif. Pour l'Amoxicilline, les effets secondaires les plus fréquents incluent : diarrhée, nausées, éruptions cutanées, et dans de rares cas, réactions allergiques. Pour des informations précises sur un médicament spécifique, je recommande de consulter la notice du médicament ou un professionnel de santé."
+            
+            if any(word in message_lower for word in ['amoxicilline', 'amoxicillin', 'antibiotique', 'antibiotic']):
+                return "L'Amoxicilline est un antibiotique de la famille des pénicillines, utilisé pour traiter diverses infections bactériennes. Les effets secondaires courants peuvent inclure des troubles digestifs (nausées, diarrhée) et des réactions cutanées. La posologie dépend de l'infection traitée et doit être déterminée par un professionnel de santé."
+            
+            if 'posologie' in message_lower or 'dosage' in message_lower:
+                return "La posologie d'un médicament dépend de plusieurs facteurs : le type d'infection, l'âge du patient, la fonction rénale, et d'autres conditions médicales. Pour des informations précises sur la posologie, consultez la notice du médicament ou un professionnel de santé."
+            
+            # Generic pharma fallback
+            return f"Je comprends votre question sur '{message}'. Dans le domaine pharmaceutique, les réponses peuvent varier selon le contexte spécifique. Pourriez-vous préciser :\n• Le médicament ou dispositif concerné\n• Le contexte d'utilisation\n• L'information recherchée (effets, posologie, interactions, etc.)"
         
-        # Out of domain - redirect clearly
-        return f"Je suis désolé, mais je suis spécialisé uniquement dans le domaine pharmaceutique et de la santé (Pharma/MedTech). Je ne peux répondre qu'aux questions concernant :\n• Les médicaments et principes actifs\n• Les dispositifs médicaux (MedTech)\n• Les essais cliniques et la recherche pharmaceutique\n• La réglementation (FDA, EMA, ANSM)\n• La pharmacovigilance et la sécurité des médicaments\n• La biotechnologie pharmaceutique\n• Les innovations en santé\n\nVotre question '{message}' ne semble pas être liée à ce domaine. Pourriez-vous reformuler votre question dans le contexte pharmaceutique et de la santé?"
+        # Not pharma question
+        return "Je suis spécialisé uniquement dans le domaine pharmaceutique et de la santé (Pharma/MedTech). Je peux vous aider avec des questions sur les médicaments, les dispositifs médicaux, les essais cliniques, la réglementation, et la recherche pharmaceutique. Comment puis-je vous aider dans ce domaine?"
     
     def _is_domain_related(self, text: str) -> bool:
         """Check if text is related to Pharma/MedTech domain"""
@@ -415,16 +477,32 @@ class ChatModel:
         if len(set(text.replace(' ', ''))) < 3:
             return True
         
-        # Check for repeated words
+        # Check for repeated words (more strict)
         words = text.split()
         if len(words) > 0:
             unique_words = set(words)
-            if len(unique_words) < len(words) * 0.3:  # More than 70% repetition
+            # If less than 40% unique words, it's repetitive
+            if len(unique_words) < len(words) * 0.4:
                 return True
+            
+            # Check for same word repeated more than 3 times in short text
+            word_counts = {}
+            for word in words:
+                word_counts[word] = word_counts.get(word, 0) + 1
+            for word, count in word_counts.items():
+                if count > 3 and len(words) < 15:
+                    return True
         
         # Check for only punctuation
         if all(c in '.,!?;:' for c in text.replace(' ', '')):
             return True
+        
+        # Check for repeated phrases (3+ words repeated)
+        if len(words) >= 6:
+            for i in range(len(words) - 2):
+                phrase = ' '.join(words[i:i+3])
+                if text.count(phrase) > 1:
+                    return True
         
         return False
     
