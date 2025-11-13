@@ -79,36 +79,42 @@ def load_model():
 
 
 def get_domain_specific_response(message_lower: str):
-    """Get domain-specific response for common CV/cover letter questions"""
+    """Get domain-specific response for common Pharma/MedTech questions"""
     # Greetings
     if message_lower in ['bonjour', 'salut', 'hello', 'hi', 'bonsoir', 'bonne journée']:
-        return "Bonjour! Je suis spécialisé dans l'aide à la rédaction de CV et de lettres de motivation. Comment puis-je vous aider aujourd'hui?"
+        return "Bonjour! Je suis un assistant spécialisé dans le domaine pharmaceutique et de la santé (Pharma/MedTech). Je peux vous aider avec des questions sur les médicaments, les dispositifs médicaux, la recherche pharmaceutique, la réglementation, les essais cliniques, et les innovations en santé. Comment puis-je vous aider aujourd'hui?"
     
-    # CV-related keywords
-    if any(word in message_lower for word in ['cv', 'c.v.', 'curriculum vitae', 'curriculum', 'résumé']):
-        if any(word in message_lower for word in ['comment', 'aide', 'aider', 'améliorer', 'rédiger', 'écrire']):
-            return "Je peux vous aider avec votre CV! Voici ce que je peux faire :\n• Rédiger ou améliorer des sections de votre CV\n• Formuler vos compétences et expériences professionnelles\n• Conseiller sur la structure et la mise en forme\n• Adapter votre CV à un poste spécifique\n\nQuelle section souhaitez-vous travailler?"
-        return "Je peux vous aider avec votre CV! Que souhaitez-vous savoir? Par exemple, je peux vous aider à rédiger une section, formuler vos compétences, ou améliorer votre présentation."
+    # Medications/Drugs
+    if any(word in message_lower for word in ['médicament', 'medicament', 'drug', 'molecule', 'principe actif', 'posologie', 'dosage']):
+        return "Je peux vous aider avec des questions sur les médicaments! Voici ce que je peux faire :\n• Expliquer les principes actifs et mécanismes d'action\n• Discuter de la posologie et des dosages\n• Informer sur les interactions médicamenteuses\n• Parler de la pharmacocinétique et pharmacodynamie\n\nQuelle question avez-vous sur les médicaments?"
     
-    # Cover letter keywords
-    if any(word in message_lower for word in ['lettre', 'motivation', 'cover letter', 'candidature', 'lettre de motivation']):
-        return "Je peux vous aider à rédiger votre lettre de motivation! Voici ce que je peux faire :\n• Structurer votre lettre\n• Rédiger des paragraphes adaptés au poste\n• Mettre en valeur vos compétences\n• Adapter le ton et le style\n\nPour quel poste souhaitez-vous écrire votre lettre?"
+    # Medical devices
+    if any(word in message_lower for word in ['dispositif médical', 'dispositif medical', 'medical device', 'medtech', 'équipement médical']):
+        return "Je peux vous aider avec des questions sur les dispositifs médicaux (MedTech)! Voici ce que je peux faire :\n• Expliquer les types de dispositifs médicaux\n• Discuter de la réglementation (CE marking, FDA)\n• Parler des innovations en dispositifs médicaux\n• Informer sur les classes de dispositifs (I, IIa, IIb, III)\n\nQuelle question avez-vous sur les dispositifs médicaux?"
     
-    # Skills/competences
-    if any(word in message_lower for word in ['compétence', 'competence', 'skill', 'savoir-faire', 'aptitude']):
-        return "Pour formuler vos compétences sur votre CV, je recommande :\n• Utiliser des verbes d'action (gérer, développer, optimiser...)\n• Être spécifique et quantifier quand possible\n• Adapter aux mots-clés du poste visé\n\nQuelles compétences souhaitez-vous mettre en avant?"
+    # Clinical trials
+    if any(word in message_lower for word in ['essai clinique', 'clinical trial', 'étude clinique', 'phase', 'rct', 'randomized']):
+        return "Je peux vous aider avec des questions sur les essais cliniques! Voici ce que je peux faire :\n• Expliquer les phases des essais cliniques (I, II, III, IV)\n• Discuter de la méthodologie (randomisation, double aveugle)\n• Parler de la réglementation (ICH-GCP, FDA, EMA)\n• Informer sur les endpoints et critères d'évaluation\n\nQuelle question avez-vous sur les essais cliniques?"
     
-    # Experience
-    if any(word in message_lower for word in ['expérience', 'experience', 'emploi', 'travail', 'poste', 'carrière']):
-        return "Pour décrire vos expériences professionnelles, je recommande :\n• Utiliser la structure : Action + Résultat + Contexte\n• Quantifier vos réalisations (ex: 'augmenté les ventes de 20%')\n• Mettre en avant les résultats concrets\n\nQuelle expérience souhaitez-vous décrire?"
+    # Regulation
+    if any(word in message_lower for word in ['réglementation', 'regulation', 'fda', 'ema', 'ansm', 'autorisation', 'mise sur le marché', 'amm']):
+        return "Je peux vous aider avec des questions sur la réglementation pharmaceutique! Voici ce que je peux faire :\n• Expliquer les processus d'autorisation de mise sur le marché (AMM)\n• Discuter des agences réglementaires (FDA, EMA, ANSM)\n• Parler des exigences réglementaires pour les médicaments et dispositifs\n• Informer sur les procédures d'enregistrement\n\nQuelle question avez-vous sur la réglementation?"
     
-    # Structure/format
-    if any(word in message_lower for word in ['structure', 'format', 'mise en forme', 'organisation', 'modèle', 'template']):
-        return "Structure recommandée pour un CV :\n1. En-tête (nom, coordonnées)\n2. Profil/Objectif (optionnel, 2-3 lignes)\n3. Expériences professionnelles (du plus récent au plus ancien)\n4. Formations\n5. Compétences\n6. Langues/Certifications (optionnel)\n\nQuelle section souhaitez-vous travailler?"
+    # Research & Development
+    if any(word in message_lower for word in ['recherche', 'research', 'développement', 'development', 'r&d', 'rd', 'innovation', 'découverte']):
+        return "Je peux vous aider avec des questions sur la recherche et développement pharmaceutique! Voici ce que je peux faire :\n• Expliquer les étapes du développement de médicaments\n• Discuter de la découverte de molécules\n• Parler des technologies innovantes (biotechnologie, thérapies géniques)\n• Informer sur les partenariats et collaborations\n\nQuelle question avez-vous sur la R&D pharmaceutique?"
+    
+    # Pharmacovigilance
+    if any(word in message_lower for word in ['pharmacovigilance', 'effet indésirable', 'side effect', 'sécurité', 'safety', 'surveillance']):
+        return "Je peux vous aider avec des questions sur la pharmacovigilance! Voici ce que je peux faire :\n• Expliquer les systèmes de surveillance post-commercialisation\n• Discuter de la gestion des effets indésirables\n• Parler des obligations réglementaires de pharmacovigilance\n• Informer sur les signalements et rapports\n\nQuelle question avez-vous sur la pharmacovigilance?"
+    
+    # Biotechnology
+    if any(word in message_lower for word in ['biotechnologie', 'biotechnology', 'biotech', 'thérapie génique', 'gene therapy', 'biologique', 'biologic']):
+        return "Je peux vous aider avec des questions sur la biotechnologie pharmaceutique! Voici ce que je peux faire :\n• Expliquer les médicaments biologiques et biosimilaires\n• Discuter des thérapies géniques et cellulaires\n• Parler des technologies de production biotechnologique\n• Informer sur les innovations en biotech\n\nQuelle question avez-vous sur la biotechnologie?"
     
     # Thanks
     if any(word in message_lower for word in ['merci', 'thanks', 'thank you', 'remerciement']):
-        return "De rien! N'hésitez pas si vous avez d'autres questions sur votre CV ou votre lettre de motivation."
+        return "De rien! N'hésitez pas si vous avez d'autres questions sur le domaine pharmaceutique et de la santé (Pharma/MedTech)."
     
     return None
 
