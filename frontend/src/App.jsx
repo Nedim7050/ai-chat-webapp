@@ -130,9 +130,9 @@ function App() {
   return (
     <div className="app">
       <div className="chat-container">
-        <div className="chat-header">
-          <div className="header-left">
-            <h1>AI Chat</h1>
+            <div className="chat-header">
+              <div className="header-left">
+                <h1>Assistant CV & Lettres de motivation</h1>
             <div className="connection-status">
               <span className={`status-dot ${connectionStatus}`}></span>
               {connectionStatus === 'connected' && 'En ligne'}
@@ -147,7 +147,7 @@ function App() {
         <div className="messages-container">
           {messages.length === 0 && (
             <div className="welcome-message">
-              <p>👋 Bonjour! Je suis votre assistant IA. Posez-moi une question!</p>
+              <p>👋 Bonjour! Je suis votre assistant spécialisé dans la rédaction de CV et de lettres de motivation. Comment puis-je vous aider aujourd'hui?</p>
             </div>
           )}
           

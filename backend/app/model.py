@@ -1,5 +1,6 @@
 """
 Model wrapper for loading and using Hugging Face transformer models
+Specialized in CV and cover letter writing assistance
 """
 from transformers import AutoTokenizer, AutoModelForCausalLM, pipeline
 import torch
@@ -9,8 +10,13 @@ from typing import List, Dict, Optional
 class ChatModel:
     """
     Singleton wrapper for Hugging Face conversational model
-    Uses DialoGPT-small or conversational pipeline
+    Specialized in CV and cover letter writing assistance
+    Uses DialoGPT-small or conversational pipeline with domain-specific context
     """
+    
+    # Domain-specific system context
+    DOMAIN = "CV et Lettres de motivation"
+    SYSTEM_CONTEXT = "Tu es un assistant spécialisé dans l'aide à la rédaction de CV et de lettres de motivation. Tu aides les utilisateurs à rédiger, améliorer et optimiser leurs candidatures professionnelles."
     
     def __init__(self, model_name: str = "microsoft/DialoGPT-small"):
         self.model_name = model_name
@@ -121,22 +127,26 @@ class ChatModel:
         # Clean and validate message
         message = message.strip()
         if not message:
-            return "Je n'ai pas compris votre message. Pouvez-vous reformuler?"
+            return "Je n'ai pas compris votre message. Pouvez-vous reformuler votre question concernant votre CV ou votre lettre de motivation?"
         
-        # Check for common inputs first - use fallback immediately for better UX
         message_lower = message.lower().strip()
-        if message_lower in ['cv', 'c.v.', 'curriculum vitae', 'cv?']:
-            return "Je peux vous aider avec votre CV! Que souhaitez-vous savoir? Par exemple, je peux vous aider à rédiger une section ou à améliorer votre présentation."
+        
+        # Check for domain-specific inputs first - use specialized fallback immediately
+        domain_reply = self._get_domain_specific_response(message_lower)
+        if domain_reply:
+            return domain_reply
         
         # Try model generation, but with strict validation
         # First, try direct model generation if available
         if self.model is not None and self.tokenizer is not None:
             try:
                 reply = self._generate_with_model(message, history)
-                # Validate reply - if valid, return it
+                # Validate reply - if valid and domain-related, return it
                 if reply and isinstance(reply, str) and reply.strip():
                     if self._is_valid_response(reply) and not self._is_repetitive(reply):
-                        return reply
+                        # Ensure reply is domain-related, otherwise use fallback
+                        if self._is_domain_related(reply):
+                            return reply
             except Exception as e:
                 print(f"Error in _generate_with_model: {str(e)}")
                 import traceback
@@ -146,26 +156,39 @@ class ChatModel:
         if self.pipeline is not None:
             try:
                 reply = self._generate_with_pipeline(message, history)
-                # Validate reply - if valid, return it
+                # Validate reply - if valid and domain-related, return it
                 if reply and isinstance(reply, str) and reply.strip():
                     if self._is_valid_response(reply) and not self._is_repetitive(reply):
-                        return reply
+                        # Ensure reply is domain-related, otherwise use fallback
+                        if self._is_domain_related(reply):
+                            return reply
             except Exception as e:
                 print(f"Error in _generate_with_pipeline: {str(e)}")
                 import traceback
                 traceback.print_exc()
         
-        # If all attempts failed or returned invalid responses, use fallback
-        # This ensures we always return a response
-        return self._generate_simple_fallback(message)
+        # If all attempts failed or returned invalid responses, use domain-specific fallback
+        # This ensures we always return a domain-appropriate response
+        return self._generate_domain_fallback(message)
     
     def _generate_with_model(self, message: str, history: List[Dict[str, str]]) -> str:
-        """Generate reply using direct model inference with better parameters"""
+        """Generate reply using direct model inference with domain-specific context"""
         import torch
         
         try:
-            # Build conversation context
+            # Build conversation context with domain context
             chat_history_ids = None
+            
+            # Add domain context at the beginning if no history
+            if not history:
+                context_prompt = f"{self.SYSTEM_CONTEXT} Question: "
+                context_ids = self.tokenizer.encode(
+                    context_prompt,
+                    return_tensors='pt',
+                    max_length=50,
+                    truncation=True
+                )
+                chat_history_ids = context_ids
             
             # Process history
             for msg in history[-5:]:  # Last 5 messages for context
@@ -193,9 +216,10 @@ class ChatModel:
                         if chat_history_ids is not None:
                             chat_history_ids = torch.cat([chat_history_ids, bot_input_ids], dim=-1)
             
-            # Encode current user message
+            # Encode current user message with domain context
+            contextual_message = f"Question CV/lettre de motivation: {message}"
             new_user_input_ids = self.tokenizer.encode(
-                message + self.tokenizer.eos_token,
+                contextual_message + self.tokenizer.eos_token,
                 return_tensors='pt'
             )
             
@@ -298,22 +322,70 @@ class ChatModel:
             # Return empty string to trigger fallback
             return ""
     
-    def _generate_simple_fallback(self, message: str) -> str:
-        """Generate a simple fallback response"""
-        # Simple rule-based responses for common inputs
+    def _get_domain_specific_response(self, message_lower: str) -> Optional[str]:
+        """Get domain-specific response for common CV/cover letter questions"""
+        
+        # Greetings
+        if message_lower in ['bonjour', 'salut', 'hello', 'hi', 'bonsoir', 'bonne journée']:
+            return "Bonjour! Je suis spécialisé dans l'aide à la rédaction de CV et de lettres de motivation. Comment puis-je vous aider aujourd'hui?"
+        
+        # CV-related keywords
+        if any(word in message_lower for word in ['cv', 'c.v.', 'curriculum vitae', 'curriculum', 'résumé']):
+            if any(word in message_lower for word in ['comment', 'aide', 'aider', 'améliorer', 'rédiger', 'écrire']):
+                return "Je peux vous aider avec votre CV! Voici ce que je peux faire :\n• Rédiger ou améliorer des sections de votre CV\n• Formuler vos compétences et expériences professionnelles\n• Conseiller sur la structure et la mise en forme\n• Adapter votre CV à un poste spécifique\n\nQuelle section souhaitez-vous travailler?"
+            return "Je peux vous aider avec votre CV! Que souhaitez-vous savoir? Par exemple, je peux vous aider à rédiger une section, formuler vos compétences, ou améliorer votre présentation."
+        
+        # Cover letter keywords
+        if any(word in message_lower for word in ['lettre', 'motivation', 'cover letter', 'candidature', 'lettre de motivation']):
+            return "Je peux vous aider à rédiger votre lettre de motivation! Voici ce que je peux faire :\n• Structurer votre lettre\n• Rédiger des paragraphes adaptés au poste\n• Mettre en valeur vos compétences\n• Adapter le ton et le style\n\nPour quel poste souhaitez-vous écrire votre lettre?"
+        
+        # Skills/competences
+        if any(word in message_lower for word in ['compétence', 'competence', 'skill', 'savoir-faire', 'aptitude']):
+            return "Pour formuler vos compétences sur votre CV, je recommande :\n• Utiliser des verbes d'action (gérer, développer, optimiser...)\n• Être spécifique et quantifier quand possible\n• Adapter aux mots-clés du poste visé\n\nQuelles compétences souhaitez-vous mettre en avant?"
+        
+        # Experience
+        if any(word in message_lower for word in ['expérience', 'experience', 'emploi', 'travail', 'poste', 'emploi', 'carrière']):
+            return "Pour décrire vos expériences professionnelles, je recommande :\n• Utiliser la structure : Action + Résultat + Contexte\n• Quantifier vos réalisations (ex: 'augmenté les ventes de 20%')\n• Mettre en avant les résultats concrets\n\nQuelle expérience souhaitez-vous décrire?"
+        
+        # Structure/format
+        if any(word in message_lower for word in ['structure', 'format', 'mise en forme', 'organisation', 'modèle', 'template']):
+            return "Structure recommandée pour un CV :\n1. En-tête (nom, coordonnées)\n2. Profil/Objectif (optionnel, 2-3 lignes)\n3. Expériences professionnelles (du plus récent au plus ancien)\n4. Formations\n5. Compétences\n6. Langues/Certifications (optionnel)\n\nQuelle section souhaitez-vous travailler?"
+        
+        # Thanks
+        if any(word in message_lower for word in ['merci', 'thanks', 'thank you', 'remerciement']):
+            return "De rien! N'hésitez pas si vous avez d'autres questions sur votre CV ou votre lettre de motivation."
+        
+        return None
+    
+    def _generate_domain_fallback(self, message: str) -> str:
+        """Generate a domain-specific fallback response"""
         message_lower = message.lower().strip()
         
-        if message_lower in ['cv', 'c.v.', 'curriculum vitae']:
-            return "Je peux vous aider avec votre CV! Que souhaitez-vous savoir? Par exemple, je peux vous aider à rédiger une section ou à améliorer votre présentation."
+        # Check if it's domain-related
+        domain_keywords = ['cv', 'lettre', 'motivation', 'compétence', 'expérience', 'emploi', 'candidature', 'poste', 'travail', 'formation', 'diplôme', 'carrière']
+        if any(keyword in message_lower for keyword in domain_keywords):
+            return f"Je comprends que vous parlez de '{message}'. Pour mieux vous aider avec votre CV ou votre lettre de motivation, pouvez-vous être plus précis? Par exemple :\n• Quelle section de votre CV souhaitez-vous améliorer?\n• Pour quel poste écrivez-vous votre lettre?\n• Quelles compétences voulez-vous mettre en avant?"
         
-        if message_lower in ['bonjour', 'salut', 'hello', 'hi']:
-            return "Bonjour! Comment puis-je vous aider aujourd'hui?"
+        # Out of domain - redirect politely
+        return "Je suis spécialisé dans l'aide à la rédaction de CV et de lettres de motivation. Je peux vous aider à :\n• Rédiger ou améliorer votre CV\n• Écrire une lettre de motivation\n• Formuler vos compétences et expériences\n• Adapter votre candidature à un poste\n\nComment puis-je vous aider dans ce domaine?"
+    
+    def _is_domain_related(self, text: str) -> bool:
+        """Check if text is related to CV/cover letter domain"""
+        if not text or len(text) < 3:
+            return False
         
-        if message_lower in ['merci', 'thanks', 'thank you']:
-            return "De rien! N'hésitez pas si vous avez d'autres questions."
+        text_lower = text.lower()
+        domain_keywords = [
+            'cv', 'curriculum', 'vitae', 'résumé',
+            'lettre', 'motivation', 'candidature',
+            'compétence', 'competence', 'skill',
+            'expérience', 'experience', 'emploi', 'travail', 'poste',
+            'formation', 'diplôme', 'carrière',
+            'aide', 'aider', 'rédiger', 'améliorer', 'conseil'
+        ]
         
-        # Generic response
-        return f"Je comprends que vous dites '{message}'. Pouvez-vous me donner plus de détails ou reformuler votre question?"
+        # Check if at least one domain keyword is present
+        return any(keyword in text_lower for keyword in domain_keywords)
     
     def _is_repetitive(self, text: str) -> bool:
         """Check if text is repetitive (like just commas or repeated words)"""
