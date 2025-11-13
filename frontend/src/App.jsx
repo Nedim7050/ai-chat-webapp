@@ -118,7 +118,18 @@ function App() {
   const handleKeyPress = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
-      sendMessage()
+      if (!loading && input.trim()) {
+        sendMessage()
+      }
+    }
+  }
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      if (!loading && input.trim()) {
+        sendMessage()
+      }
     }
   }
 
@@ -130,10 +141,10 @@ function App() {
   return (
     <div className="app">
       <div className="chat-container">
-            <div className="chat-header">
-              <div className="header-left">
-                <h1>Assistant Pharma/MedTech</h1>
-                <p className="domain-subtitle">Spécialisé en Pharmaceutique & Santé</p>
+        <div className="chat-header">
+          <div className="header-left">
+            <h1>Assistant Pharma/MedTech</h1>
+            <p className="domain-subtitle">Spécialisé en Pharmaceutique & Santé</p>
             <div className="connection-status">
               <span className={`status-dot ${connectionStatus}`}></span>
               {connectionStatus === 'connected' && 'En ligne'}
@@ -192,6 +203,7 @@ function App() {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyPress={handleKeyPress}
+            onKeyDown={handleKeyDown}
             placeholder="Tapez votre message..."
             rows={1}
             className="message-input"
