@@ -49,7 +49,9 @@ function App() {
   }, [])
 
   const sendMessage = async () => {
-    if (!input.trim() || loading) return
+    if (!input.trim() || loading) {
+      return
+    }
 
     const userMessage = input.trim()
     setInput('')
@@ -198,7 +200,15 @@ function App() {
           <div ref={messagesEndRef} />
         </div>
 
-        <div className="input-container">
+        <form 
+          className="input-container"
+          onSubmit={(e) => {
+            e.preventDefault()
+            if (!loading && input.trim()) {
+              sendMessage()
+            }
+          }}
+        >
           <textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
@@ -210,13 +220,13 @@ function App() {
             disabled={loading}
           />
           <button 
-            onClick={sendMessage} 
+            type="submit"
             disabled={loading || !input.trim()}
             className="send-button"
           >
-            Envoyer
+            {loading ? 'Envoi...' : 'Envoyer'}
           </button>
-        </div>
+        </form>
       </div>
     </div>
   )
