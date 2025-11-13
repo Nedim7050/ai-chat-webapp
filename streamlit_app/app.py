@@ -113,18 +113,22 @@ def get_domain_specific_response(message_lower: str):
     return None
 
 def is_domain_related(text: str) -> bool:
-    """Check if text is related to CV/cover letter domain"""
+    """Check if text is related to Pharma/MedTech domain"""
     if not text or len(text) < 3:
         return False
     
     text_lower = text.lower()
     domain_keywords = [
-        'cv', 'curriculum', 'vitae', 'résumé',
-        'lettre', 'motivation', 'candidature',
-        'compétence', 'competence', 'skill',
-        'expérience', 'experience', 'emploi', 'travail', 'poste',
-        'formation', 'diplôme', 'carrière',
-        'aide', 'aider', 'rédiger', 'améliorer', 'conseil'
+        'médicament', 'medicament', 'drug', 'pharma', 'pharmaceutique', 'pharmaceutical',
+        'dispositif médical', 'dispositif medical', 'medical device', 'medtech',
+        'essai clinique', 'clinical trial', 'étude clinique', 'phase',
+        'réglementation', 'regulation', 'fda', 'ema', 'ansm', 'amm',
+        'recherche', 'research', 'développement', 'development', 'r&d', 'rd',
+        'pharmacovigilance', 'effet indésirable', 'side effect', 'adverse',
+        'biotechnologie', 'biotechnology', 'biotech', 'thérapie génique', 'gene therapy',
+        'santé', 'health', 'médical', 'medical', 'thérapeutique', 'therapeutic',
+        'molecule', 'principe actif', 'posologie', 'dosage', 'pharmacocinétique',
+        'biosimilaire', 'biosimilar', 'biologique', 'biologic', 'innovation'
     ]
     
     return any(keyword in text_lower for keyword in domain_keywords)
@@ -133,11 +137,20 @@ def generate_domain_fallback(message: str) -> str:
     """Generate a domain-specific fallback response"""
     message_lower = message.lower().strip()
     
-    domain_keywords = ['cv', 'lettre', 'motivation', 'compétence', 'expérience', 'emploi', 'candidature', 'poste', 'travail', 'formation', 'diplôme', 'carrière']
+    domain_keywords = [
+        'médicament', 'medicament', 'drug', 'pharma', 'pharmaceutique',
+        'dispositif médical', 'dispositif medical', 'medical device', 'medtech',
+        'essai clinique', 'clinical trial', 'étude clinique',
+        'réglementation', 'regulation', 'fda', 'ema', 'ansm',
+        'recherche', 'research', 'développement', 'development', 'r&d',
+        'pharmacovigilance', 'effet indésirable', 'side effect',
+        'biotechnologie', 'biotechnology', 'biotech', 'thérapie génique',
+        'santé', 'health', 'médical', 'medical', 'thérapeutique'
+    ]
     if any(keyword in message_lower for keyword in domain_keywords):
-        return f"Je comprends que vous parlez de '{message}'. Pour mieux vous aider avec votre CV ou votre lettre de motivation, pouvez-vous être plus précis? Par exemple :\n• Quelle section de votre CV souhaitez-vous améliorer?\n• Pour quel poste écrivez-vous votre lettre?\n• Quelles compétences voulez-vous mettre en avant?"
+        return f"Je comprends que vous parlez de '{message}'. Pour mieux vous aider dans le domaine pharmaceutique et de la santé (Pharma/MedTech), pouvez-vous être plus précis? Par exemple :\n• Quelle question avez-vous sur les médicaments ou dispositifs médicaux?\n• Souhaitez-vous des informations sur la réglementation?\n• Avez-vous des questions sur les essais cliniques ou la recherche?"
     
-    return "Je suis spécialisé dans l'aide à la rédaction de CV et de lettres de motivation. Je peux vous aider à :\n• Rédiger ou améliorer votre CV\n• Écrire une lettre de motivation\n• Formuler vos compétences et expériences\n• Adapter votre candidature à un poste\n\nComment puis-je vous aider dans ce domaine?"
+    return f"Je suis désolé, mais je suis spécialisé uniquement dans le domaine pharmaceutique et de la santé (Pharma/MedTech). Je ne peux répondre qu'aux questions concernant :\n• Les médicaments et principes actifs\n• Les dispositifs médicaux (MedTech)\n• Les essais cliniques et la recherche pharmaceutique\n• La réglementation (FDA, EMA, ANSM)\n• La pharmacovigilance et la sécurité des médicaments\n• La biotechnologie pharmaceutique\n• Les innovations en santé\n\nVotre question '{message}' ne semble pas être liée à ce domaine. Pourriez-vous reformuler votre question dans le contexte pharmaceutique et de la santé?"
 
 def generate_reply(pipeline_obj, message, history):
     """Generate a reply using the model with domain-specific validation"""
@@ -392,7 +405,8 @@ if not st.session_state.model_loaded:
             st.stop()
 
 # Main UI
-st.title("💼 Assistant CV & Lettres de motivation")
+st.title("💊 Assistant Pharma/MedTech")
+st.markdown("**Spécialisé en Pharmaceutique & Santé**")
 st.markdown("---")
 
 # Sidebar for controls
@@ -424,7 +438,19 @@ chat_container = st.container()
 
 with chat_container:
     if not st.session_state.messages:
-        st.info("👋 Bonjour! Je suis votre assistant spécialisé dans la rédaction de CV et de lettres de motivation. Comment puis-je vous aider aujourd'hui?")
+        st.info("""
+        👋 **Bonjour!** Je suis un assistant spécialisé dans le domaine **pharmaceutique et de la santé (Pharma/MedTech)**.
+        
+        Je peux vous aider avec des questions sur :
+        - 💊 Médicaments et principes actifs
+        - 🏥 Dispositifs médicaux (MedTech)
+        - 🔬 Essais cliniques et recherche pharmaceutique
+        - 📋 Réglementation (FDA, EMA, ANSM)
+        - ⚠️ Pharmacovigilance et sécurité
+        - 🧬 Biotechnologie pharmaceutique
+        
+        **Note :** Je ne peux répondre qu'aux questions liées au domaine pharmaceutique et de la santé.
+        """)
     
     for msg in st.session_state.messages:
         role = msg["role"]

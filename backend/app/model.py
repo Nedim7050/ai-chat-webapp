@@ -1,6 +1,6 @@
 """
 Model wrapper for loading and using Hugging Face transformer models
-Specialized in CV and cover letter writing assistance
+Specialized in Pharmaceutical & Health (Pharma/MedTech) domain
 """
 from transformers import AutoTokenizer, AutoModelForCausalLM, pipeline
 import torch
@@ -10,13 +10,13 @@ from typing import List, Dict, Optional
 class ChatModel:
     """
     Singleton wrapper for Hugging Face conversational model
-    Specialized in CV and cover letter writing assistance
+    Specialized in Pharmaceutical & Health (Pharma/MedTech) domain
     Uses DialoGPT-small or conversational pipeline with domain-specific context
     """
     
     # Domain-specific system context
-    DOMAIN = "CV et Lettres de motivation"
-    SYSTEM_CONTEXT = "Tu es un assistant spécialisé dans l'aide à la rédaction de CV et de lettres de motivation. Tu aides les utilisateurs à rédiger, améliorer et optimiser leurs candidatures professionnelles."
+    DOMAIN = "Pharmaceutique & Santé (Pharma/MedTech)"
+    SYSTEM_CONTEXT = "Tu es un assistant spécialisé dans le domaine pharmaceutique et de la santé (Pharma/MedTech). Tu aides les utilisateurs avec des questions sur les médicaments, les dispositifs médicaux, la recherche pharmaceutique, la réglementation, les essais cliniques, et les innovations en santé."
     
     def __init__(self, model_name: str = "microsoft/DialoGPT-small"):
         self.model_name = model_name
@@ -127,7 +127,7 @@ class ChatModel:
         # Clean and validate message
         message = message.strip()
         if not message:
-            return "Je n'ai pas compris votre message. Pouvez-vous reformuler votre question concernant votre CV ou votre lettre de motivation?"
+            return "Je n'ai pas compris votre message. Pouvez-vous reformuler votre question concernant le domaine pharmaceutique et de la santé (Pharma/MedTech)?"
         
         message_lower = message.lower().strip()
         
@@ -217,7 +217,7 @@ class ChatModel:
                             chat_history_ids = torch.cat([chat_history_ids, bot_input_ids], dim=-1)
             
             # Encode current user message with domain context
-            contextual_message = f"Question CV/lettre de motivation: {message}"
+            contextual_message = f"Question Pharma/MedTech: {message}"
             new_user_input_ids = self.tokenizer.encode(
                 contextual_message + self.tokenizer.eos_token,
                 return_tensors='pt'
@@ -323,37 +323,43 @@ class ChatModel:
             return ""
     
     def _get_domain_specific_response(self, message_lower: str) -> Optional[str]:
-        """Get domain-specific response for common CV/cover letter questions"""
+        """Get domain-specific response for common Pharma/MedTech questions"""
         
         # Greetings
         if message_lower in ['bonjour', 'salut', 'hello', 'hi', 'bonsoir', 'bonne journée']:
-            return "Bonjour! Je suis spécialisé dans l'aide à la rédaction de CV et de lettres de motivation. Comment puis-je vous aider aujourd'hui?"
+            return "Bonjour! Je suis un assistant spécialisé dans le domaine pharmaceutique et de la santé (Pharma/MedTech). Je peux vous aider avec des questions sur les médicaments, les dispositifs médicaux, la recherche pharmaceutique, la réglementation, les essais cliniques, et les innovations en santé. Comment puis-je vous aider aujourd'hui?"
         
-        # CV-related keywords
-        if any(word in message_lower for word in ['cv', 'c.v.', 'curriculum vitae', 'curriculum', 'résumé']):
-            if any(word in message_lower for word in ['comment', 'aide', 'aider', 'améliorer', 'rédiger', 'écrire']):
-                return "Je peux vous aider avec votre CV! Voici ce que je peux faire :\n• Rédiger ou améliorer des sections de votre CV\n• Formuler vos compétences et expériences professionnelles\n• Conseiller sur la structure et la mise en forme\n• Adapter votre CV à un poste spécifique\n\nQuelle section souhaitez-vous travailler?"
-            return "Je peux vous aider avec votre CV! Que souhaitez-vous savoir? Par exemple, je peux vous aider à rédiger une section, formuler vos compétences, ou améliorer votre présentation."
+        # Medications/Drugs
+        if any(word in message_lower for word in ['médicament', 'medicament', 'drug', 'molecule', 'principe actif', 'posologie', 'dosage']):
+            return "Je peux vous aider avec des questions sur les médicaments! Voici ce que je peux faire :\n• Expliquer les principes actifs et mécanismes d'action\n• Discuter de la posologie et des dosages\n• Informer sur les interactions médicamenteuses\n• Parler de la pharmacocinétique et pharmacodynamie\n\nQuelle question avez-vous sur les médicaments?"
         
-        # Cover letter keywords
-        if any(word in message_lower for word in ['lettre', 'motivation', 'cover letter', 'candidature', 'lettre de motivation']):
-            return "Je peux vous aider à rédiger votre lettre de motivation! Voici ce que je peux faire :\n• Structurer votre lettre\n• Rédiger des paragraphes adaptés au poste\n• Mettre en valeur vos compétences\n• Adapter le ton et le style\n\nPour quel poste souhaitez-vous écrire votre lettre?"
+        # Medical devices
+        if any(word in message_lower for word in ['dispositif médical', 'dispositif medical', 'medical device', 'medtech', 'équipement médical']):
+            return "Je peux vous aider avec des questions sur les dispositifs médicaux (MedTech)! Voici ce que je peux faire :\n• Expliquer les types de dispositifs médicaux\n• Discuter de la réglementation (CE marking, FDA)\n• Parler des innovations en dispositifs médicaux\n• Informer sur les classes de dispositifs (I, IIa, IIb, III)\n\nQuelle question avez-vous sur les dispositifs médicaux?"
         
-        # Skills/competences
-        if any(word in message_lower for word in ['compétence', 'competence', 'skill', 'savoir-faire', 'aptitude']):
-            return "Pour formuler vos compétences sur votre CV, je recommande :\n• Utiliser des verbes d'action (gérer, développer, optimiser...)\n• Être spécifique et quantifier quand possible\n• Adapter aux mots-clés du poste visé\n\nQuelles compétences souhaitez-vous mettre en avant?"
+        # Clinical trials
+        if any(word in message_lower for word in ['essai clinique', 'clinical trial', 'étude clinique', 'phase', 'rct', 'randomized']):
+            return "Je peux vous aider avec des questions sur les essais cliniques! Voici ce que je peux faire :\n• Expliquer les phases des essais cliniques (I, II, III, IV)\n• Discuter de la méthodologie (randomisation, double aveugle)\n• Parler de la réglementation (ICH-GCP, FDA, EMA)\n• Informer sur les endpoints et critères d'évaluation\n\nQuelle question avez-vous sur les essais cliniques?"
         
-        # Experience
-        if any(word in message_lower for word in ['expérience', 'experience', 'emploi', 'travail', 'poste', 'emploi', 'carrière']):
-            return "Pour décrire vos expériences professionnelles, je recommande :\n• Utiliser la structure : Action + Résultat + Contexte\n• Quantifier vos réalisations (ex: 'augmenté les ventes de 20%')\n• Mettre en avant les résultats concrets\n\nQuelle expérience souhaitez-vous décrire?"
+        # Regulation
+        if any(word in message_lower for word in ['réglementation', 'regulation', 'fda', 'ema', 'ansm', 'autorisation', 'mise sur le marché', 'amm']):
+            return "Je peux vous aider avec des questions sur la réglementation pharmaceutique! Voici ce que je peux faire :\n• Expliquer les processus d'autorisation de mise sur le marché (AMM)\n• Discuter des agences réglementaires (FDA, EMA, ANSM)\n• Parler des exigences réglementaires pour les médicaments et dispositifs\n• Informer sur les procédures d'enregistrement\n\nQuelle question avez-vous sur la réglementation?"
         
-        # Structure/format
-        if any(word in message_lower for word in ['structure', 'format', 'mise en forme', 'organisation', 'modèle', 'template']):
-            return "Structure recommandée pour un CV :\n1. En-tête (nom, coordonnées)\n2. Profil/Objectif (optionnel, 2-3 lignes)\n3. Expériences professionnelles (du plus récent au plus ancien)\n4. Formations\n5. Compétences\n6. Langues/Certifications (optionnel)\n\nQuelle section souhaitez-vous travailler?"
+        # Research & Development
+        if any(word in message_lower for word in ['recherche', 'research', 'développement', 'development', 'r&d', 'rd', 'innovation', 'découverte']):
+            return "Je peux vous aider avec des questions sur la recherche et développement pharmaceutique! Voici ce que je peux faire :\n• Expliquer les étapes du développement de médicaments\n• Discuter de la découverte de molécules\n• Parler des technologies innovantes (biotechnologie, thérapies géniques)\n• Informer sur les partenariats et collaborations\n\nQuelle question avez-vous sur la R&D pharmaceutique?"
+        
+        # Pharmacovigilance
+        if any(word in message_lower for word in ['pharmacovigilance', 'effet indésirable', 'side effect', 'sécurité', 'safety', 'surveillance']):
+            return "Je peux vous aider avec des questions sur la pharmacovigilance! Voici ce que je peux faire :\n• Expliquer les systèmes de surveillance post-commercialisation\n• Discuter de la gestion des effets indésirables\n• Parler des obligations réglementaires de pharmacovigilance\n• Informer sur les signalements et rapports\n\nQuelle question avez-vous sur la pharmacovigilance?"
+        
+        # Biotechnology
+        if any(word in message_lower for word in ['biotechnologie', 'biotechnology', 'biotech', 'thérapie génique', 'gene therapy', 'biologique', 'biologic']):
+            return "Je peux vous aider avec des questions sur la biotechnologie pharmaceutique! Voici ce que je peux faire :\n• Expliquer les médicaments biologiques et biosimilaires\n• Discuter des thérapies géniques et cellulaires\n• Parler des technologies de production biotechnologique\n• Informer sur les innovations en biotech\n\nQuelle question avez-vous sur la biotechnologie?"
         
         # Thanks
         if any(word in message_lower for word in ['merci', 'thanks', 'thank you', 'remerciement']):
-            return "De rien! N'hésitez pas si vous avez d'autres questions sur votre CV ou votre lettre de motivation."
+            return "De rien! N'hésitez pas si vous avez d'autres questions sur le domaine pharmaceutique et de la santé (Pharma/MedTech)."
         
         return None
     
@@ -362,26 +368,39 @@ class ChatModel:
         message_lower = message.lower().strip()
         
         # Check if it's domain-related
-        domain_keywords = ['cv', 'lettre', 'motivation', 'compétence', 'expérience', 'emploi', 'candidature', 'poste', 'travail', 'formation', 'diplôme', 'carrière']
+        domain_keywords = [
+            'médicament', 'medicament', 'drug', 'pharma', 'pharmaceutique',
+            'dispositif médical', 'dispositif medical', 'medical device', 'medtech',
+            'essai clinique', 'clinical trial', 'étude clinique',
+            'réglementation', 'regulation', 'fda', 'ema', 'ansm',
+            'recherche', 'research', 'développement', 'development', 'r&d',
+            'pharmacovigilance', 'effet indésirable', 'side effect',
+            'biotechnologie', 'biotechnology', 'biotech', 'thérapie génique',
+            'santé', 'health', 'médical', 'medical', 'thérapeutique'
+        ]
         if any(keyword in message_lower for keyword in domain_keywords):
-            return f"Je comprends que vous parlez de '{message}'. Pour mieux vous aider avec votre CV ou votre lettre de motivation, pouvez-vous être plus précis? Par exemple :\n• Quelle section de votre CV souhaitez-vous améliorer?\n• Pour quel poste écrivez-vous votre lettre?\n• Quelles compétences voulez-vous mettre en avant?"
+            return f"Je comprends que vous parlez de '{message}'. Pour mieux vous aider dans le domaine pharmaceutique et de la santé (Pharma/MedTech), pouvez-vous être plus précis? Par exemple :\n• Quelle question avez-vous sur les médicaments ou dispositifs médicaux?\n• Souhaitez-vous des informations sur la réglementation?\n• Avez-vous des questions sur les essais cliniques ou la recherche?"
         
-        # Out of domain - redirect politely
-        return "Je suis spécialisé dans l'aide à la rédaction de CV et de lettres de motivation. Je peux vous aider à :\n• Rédiger ou améliorer votre CV\n• Écrire une lettre de motivation\n• Formuler vos compétences et expériences\n• Adapter votre candidature à un poste\n\nComment puis-je vous aider dans ce domaine?"
+        # Out of domain - redirect clearly
+        return f"Je suis désolé, mais je suis spécialisé uniquement dans le domaine pharmaceutique et de la santé (Pharma/MedTech). Je ne peux répondre qu'aux questions concernant :\n• Les médicaments et principes actifs\n• Les dispositifs médicaux (MedTech)\n• Les essais cliniques et la recherche pharmaceutique\n• La réglementation (FDA, EMA, ANSM)\n• La pharmacovigilance et la sécurité des médicaments\n• La biotechnologie pharmaceutique\n• Les innovations en santé\n\nVotre question '{message}' ne semble pas être liée à ce domaine. Pourriez-vous reformuler votre question dans le contexte pharmaceutique et de la santé?"
     
     def _is_domain_related(self, text: str) -> bool:
-        """Check if text is related to CV/cover letter domain"""
+        """Check if text is related to Pharma/MedTech domain"""
         if not text or len(text) < 3:
             return False
         
         text_lower = text.lower()
         domain_keywords = [
-            'cv', 'curriculum', 'vitae', 'résumé',
-            'lettre', 'motivation', 'candidature',
-            'compétence', 'competence', 'skill',
-            'expérience', 'experience', 'emploi', 'travail', 'poste',
-            'formation', 'diplôme', 'carrière',
-            'aide', 'aider', 'rédiger', 'améliorer', 'conseil'
+            'médicament', 'medicament', 'drug', 'pharma', 'pharmaceutique', 'pharmaceutical',
+            'dispositif médical', 'dispositif medical', 'medical device', 'medtech',
+            'essai clinique', 'clinical trial', 'étude clinique', 'phase',
+            'réglementation', 'regulation', 'fda', 'ema', 'ansm', 'amm',
+            'recherche', 'research', 'développement', 'development', 'r&d', 'rd',
+            'pharmacovigilance', 'effet indésirable', 'side effect', 'adverse',
+            'biotechnologie', 'biotechnology', 'biotech', 'thérapie génique', 'gene therapy',
+            'santé', 'health', 'médical', 'medical', 'thérapeutique', 'therapeutic',
+            'molecule', 'principe actif', 'posologie', 'dosage', 'pharmacocinétique',
+            'biosimilaire', 'biosimilar', 'biologique', 'biologic', 'innovation'
         ]
         
         # Check if at least one domain keyword is present

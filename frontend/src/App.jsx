@@ -132,7 +132,8 @@ function App() {
       <div className="chat-container">
             <div className="chat-header">
               <div className="header-left">
-                <h1>Assistant CV & Lettres de motivation</h1>
+                <h1>Assistant Pharma/MedTech</h1>
+                <p className="domain-subtitle">Spécialisé en Pharmaceutique & Santé</p>
             <div className="connection-status">
               <span className={`status-dot ${connectionStatus}`}></span>
               {connectionStatus === 'connected' && 'En ligne'}
@@ -147,7 +148,17 @@ function App() {
         <div className="messages-container">
           {messages.length === 0 && (
             <div className="welcome-message">
-              <p>👋 Bonjour! Je suis votre assistant spécialisé dans la rédaction de CV et de lettres de motivation. Comment puis-je vous aider aujourd'hui?</p>
+              <p>👋 Bonjour! Je suis un assistant spécialisé dans le domaine <strong>pharmaceutique et de la santé (Pharma/MedTech)</strong>.</p>
+              <p>Je peux vous aider avec des questions sur :</p>
+              <ul>
+                <li>💊 Médicaments et principes actifs</li>
+                <li>🏥 Dispositifs médicaux (MedTech)</li>
+                <li>🔬 Essais cliniques et recherche pharmaceutique</li>
+                <li>📋 Réglementation (FDA, EMA, ANSM)</li>
+                <li>⚠️ Pharmacovigilance et sécurité</li>
+                <li>🧬 Biotechnologie pharmaceutique</li>
+              </ul>
+              <p><strong>Note :</strong> Je ne peux répondre qu'aux questions liées au domaine pharmaceutique et de la santé.</p>
             </div>
           )}
           
