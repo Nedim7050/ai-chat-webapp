@@ -233,7 +233,15 @@ function App() {
           className="input-container"
           onSubmit={(e) => {
             e.preventDefault()
+            // Prevent multiple rapid submissions
             if (!loading && input.trim()) {
+              const userMessage = input.trim()
+              // Check if this is the same as last user message
+              const lastUserMsg = messages.filter(m => m.role === 'user').slice(-1)[0]
+              if (lastUserMsg && lastUserMsg.content === userMessage) {
+                // Don't send duplicate
+                return
+              }
               sendMessage()
             }
           }}
