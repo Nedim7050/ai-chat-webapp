@@ -245,19 +245,19 @@ class ChatModel:
             device = next(self.model.parameters()).device
             bot_input_ids = bot_input_ids.to(device)
             
-            # Generate response with better parameters - more conservative
+            # Generate response with better parameters to avoid repetition
             with torch.no_grad():
                 chat_history_ids = self.model.generate(
                     bot_input_ids,
-                    max_length=bot_input_ids.shape[1] + 50,  # Generate up to 50 new tokens (shorter)
+                    max_length=bot_input_ids.shape[1] + 80,  # Generate up to 80 new tokens
                     pad_token_id=self.tokenizer.eos_token_id,
                     do_sample=True,
-                    top_p=0.9,  # More conservative
-                    top_k=30,  # More conservative
-                    temperature=0.7,  # Lower temperature for more coherent responses
-                    no_repeat_ngram_size=4,  # Prevent 4-gram repetition
-                    repetition_penalty=1.5,  # Stronger penalty
-                    length_penalty=1.2,  # Prefer shorter responses
+                    top_p=0.92,  # Slightly more diverse
+                    top_k=40,  # More diverse
+                    temperature=0.75,  # Balanced temperature
+                    no_repeat_ngram_size=5,  # Prevent 5-gram repetition (stronger)
+                    repetition_penalty=1.8,  # Much stronger penalty against repetition
+                    length_penalty=1.1,  # Slightly prefer longer, more complete responses
                     early_stopping=True  # Stop early if EOS token
                 )
             
