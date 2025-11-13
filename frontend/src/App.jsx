@@ -56,11 +56,17 @@ function App() {
     const userMessage = input.trim()
     setInput('')
     setError(null)
-
-    // Add user message
-    const newUserMessage = { role: 'user', content: userMessage }
-    setMessages(prev => [...prev, newUserMessage])
     setLoading(true)
+
+    // Add user message - use functional update to avoid stale closure
+    setMessages(prev => {
+      // Check if this exact message was just added (prevent duplicates)
+      const lastMessage = prev[prev.length - 1]
+      if (lastMessage && lastMessage.role === 'user' && lastMessage.content === userMessage) {
+        return prev // Don't add duplicate
+      }
+      return [...prev, { role: 'user', content: userMessage }]
+    })
 
     try {
       const response = await fetch(`${API_URL}/chat`, {
@@ -99,8 +105,15 @@ function App() {
         throw new Error('Réponse invalide du serveur')
       }
       
-      // Add assistant reply
-      setMessages(prev => [...prev, { role: 'assistant', content: data.reply }])
+      // Add assistant reply - use functional update and check for duplicates
+      setMessages(prev => {
+        // Check if this exact reply was just added (prevent duplicates)
+        const lastMessage = prev[prev.length - 1]
+        if (lastMessage && lastMessage.role === 'assistant' && lastMessage.content === data.reply) {
+          return prev // Don't add duplicate
+        }
+        return [...prev, { role: 'assistant', content: data.reply }]
+      })
       setConnectionStatus('connected')
     } catch (err) {
       if (err.name === 'AbortError') {
