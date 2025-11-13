@@ -132,10 +132,18 @@ class ChatModel:
         message_lower = message.lower().strip()
         
         # Check if this exact question was already asked (prevent repetition)
+        # Only check the LAST message to avoid false positives
         if history:
-            recent_user_messages = [msg.get("content", "").lower().strip() for msg in history[-10:] if msg.get("role") == "user"]
-            if message_lower in recent_user_messages:
-                # Same question asked recently - return a variation or acknowledge
+            # Get the last user message
+            last_user_messages = [msg.get("content", "").lower().strip() for msg in history[-3:] if msg.get("role") == "user"]
+            if message_lower in last_user_messages:
+                # Same question asked in last 3 messages - check if we already answered
+                last_assistant_messages = [msg.get("content", "").strip() for msg in history[-3:] if msg.get("role") == "assistant"]
+                # If we already gave a "déjà posé" response, don't repeat it
+                if any("déjà posé" in msg.lower() or "déjà répondu" in msg.lower() for msg in last_assistant_messages):
+                    # Return a different message or just acknowledge silently
+                    return "Je comprends que vous souhaitez répéter votre question. Pourriez-vous poser une question différente ou plus précise?"
+                # First time we detect repetition
                 return "Vous avez déjà posé cette question. Pourriez-vous reformuler ou préciser votre demande?"
         
         # Check if message is clearly pharmaceutique - if yes, try model generation first

@@ -54,15 +54,24 @@ function App() {
     }
 
     const userMessage = input.trim()
+    
+    // Check if this exact message was just sent (prevent duplicates)
+    const lastUserMessage = messages.filter(m => m.role === 'user').slice(-1)[0]
+    if (lastUserMessage && lastUserMessage.content === userMessage) {
+      // Don't send duplicate message
+      return
+    }
+    
     setInput('')
     setError(null)
     setLoading(true)
 
     // Add user message - use functional update to avoid stale closure
     setMessages(prev => {
-      // Check if this exact message was just added (prevent duplicates)
-      const lastMessage = prev[prev.length - 1]
-      if (lastMessage && lastMessage.role === 'user' && lastMessage.content === userMessage) {
+      // Double check: if last message is identical, don't add
+      const lastMsg = prev[prev.length - 1]
+      if (lastMsg && lastMsg.role === 'user' && lastMsg.content === userMessage) {
+        setLoading(false)
         return prev // Don't add duplicate
       }
       return [...prev, { role: 'user', content: userMessage }]
@@ -111,6 +120,13 @@ function App() {
         const lastMessage = prev[prev.length - 1]
         if (lastMessage && lastMessage.role === 'assistant' && lastMessage.content === data.reply) {
           return prev // Don't add duplicate
+        }
+        // Also check if last 2 messages are identical (prevent rapid duplicates)
+        if (prev.length >= 2) {
+          const lastTwo = prev.slice(-2)
+          if (lastTwo[0].content === data.reply && lastTwo[1].content === data.reply) {
+            return prev // Don't add if last 2 are identical
+          }
         }
         return [...prev, { role: 'assistant', content: data.reply }]
       })
