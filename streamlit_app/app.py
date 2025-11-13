@@ -392,7 +392,7 @@ if not st.session_state.model_loaded:
             st.stop()
 
 # Main UI
-st.title("💬 AI Chat")
+st.title("💼 Assistant CV & Lettres de motivation")
 st.markdown("---")
 
 # Sidebar for controls
