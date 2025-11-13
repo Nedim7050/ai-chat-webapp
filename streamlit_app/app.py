@@ -79,14 +79,25 @@ def load_model():
 
 
 def generate_reply(pipeline_obj, message, history):
-    """Generate a reply using the model"""
+    """Generate a reply using the model with improved parameters"""
     try:
         from transformers import Conversation
+        import torch
+        
+        # Clean message
+        message = message.strip()
+        if not message:
+            return "Je n'ai pas compris votre message. Pouvez-vous reformuler?"
+        
+        # Simple fallback for common inputs
+        message_lower = message.lower()
+        if message_lower in ['cv', 'c.v.', 'curriculum vitae']:
+            return "Je peux vous aider avec votre CV! Que souhaitez-vous savoir? Par exemple, je peux vous aider à rédiger une section ou à améliorer votre présentation."
         
         conversation = Conversation()
         
-        # Add history
-        for msg in history:
+        # Add history (last 5 messages)
+        for msg in history[-5:]:
             if msg.get("role") == "user":
                 conversation.add_user_input(msg.get("content", ""))
             elif msg.get("role") == "assistant":
@@ -95,20 +106,81 @@ def generate_reply(pipeline_obj, message, history):
         # Add current message
         conversation.add_user_input(message)
         
-        # Generate reply
-        result = pipeline_obj(conversation)
+        # Generate reply with better parameters
+        try:
+            result = pipeline_obj(
+                conversation,
+                max_length=200,
+                min_length=5,
+                do_sample=True,
+                top_p=0.95,
+                top_k=50,
+                temperature=0.8,
+                repetition_penalty=1.2
+            )
+        except TypeError:
+            # If pipeline doesn't accept parameters, use default
+            result = pipeline_obj(conversation)
         
         # Extract reply
         if hasattr(result, 'generated_responses') and result.generated_responses:
             reply = result.generated_responses[-1]
         elif isinstance(result, Conversation):
-            reply = result.generated_responses[-1] if result.generated_responses else "Désolé, je n'ai pas pu générer de réponse."
+            reply = result.generated_responses[-1] if result.generated_responses else None
         else:
             reply = str(result)
         
-        return reply.strip()
+        if reply:
+            reply = reply.strip()
+            # Check if reply is repetitive
+            if _is_repetitive(reply):
+                return _generate_fallback(message)
+            return reply
+        else:
+            return _generate_fallback(message)
+            
     except Exception as e:
-        return f"Erreur lors de la génération: {str(e)}"
+        print(f"Error in generate_reply: {e}")
+        import traceback
+        traceback.print_exc()
+        return _generate_fallback(message)
+
+def _is_repetitive(text: str) -> bool:
+    """Check if text is repetitive"""
+    if not text or len(text) < 2:
+        return True
+    
+    # Check for too many repeated characters
+    if len(set(text.replace(' ', ''))) < 3:
+        return True
+    
+    # Check for repeated words
+    words = text.split()
+    if len(words) > 0:
+        unique_words = set(words)
+        if len(unique_words) < len(words) * 0.3:
+            return True
+    
+    # Check for only punctuation
+    if all(c in '.,!?;:' for c in text.replace(' ', '')):
+        return True
+    
+    return False
+
+def _generate_fallback(message: str) -> str:
+    """Generate a fallback response"""
+    message_lower = message.lower().strip()
+    
+    if message_lower in ['cv', 'c.v.', 'curriculum vitae']:
+        return "Je peux vous aider avec votre CV! Que souhaitez-vous savoir?"
+    
+    if message_lower in ['bonjour', 'salut', 'hello', 'hi']:
+        return "Bonjour! Comment puis-je vous aider aujourd'hui?"
+    
+    if message_lower in ['merci', 'thanks', 'thank you']:
+        return "De rien! N'hésitez pas si vous avez d'autres questions."
+    
+    return f"Je comprends que vous dites '{message}'. Pouvez-vous me donner plus de détails ou reformuler votre question?"
 
 
 def download_conversation(history):
