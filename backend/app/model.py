@@ -141,22 +141,28 @@ class ChatModel:
             if domain_reply:
                 return domain_reply
         
-        # Try model generation - be more permissive for pharma questions
-        # First, try direct model generation if available
+        # For pharma questions, use pre-defined answers first (more reliable)
+        if is_pharma_question:
+            specific_answer = self._get_pharma_specific_answer(message_lower)
+            if specific_answer:
+                return specific_answer
+        
+        # Try model generation ONLY if no specific answer found
+        # But be very strict - reject incoherent responses
         if self.model is not None and self.tokenizer is not None:
             try:
                 reply = self._generate_with_model(message, history)
-                # Validate reply - be more permissive for pharma questions
+                # VERY STRICT validation - reject if not perfect
                 if reply and isinstance(reply, str) and reply.strip():
-                    if self._is_valid_response(reply) and not self._is_repetitive(reply):
-                        # If question is pharma-related, accept reply even if it doesn't have explicit keywords
-                        # Only reject if reply is clearly off-topic
+                    # Must pass all validations
+                    if (self._is_valid_response(reply) and 
+                        not self._is_repetitive(reply) and
+                        not self._is_incoherent(reply)):
+                        # For pharma questions, accept if not clearly off-topic
                         if is_pharma_question:
-                            # For pharma questions, accept if not clearly off-topic
                             if not self._is_clearly_off_topic(reply):
                                 return reply
                         else:
-                            # For non-pharma questions, check domain relation
                             if self._is_domain_related(reply):
                                 return reply
             except Exception as e:
@@ -164,14 +170,15 @@ class ChatModel:
                 import traceback
                 traceback.print_exc()
         
-        # If direct model failed or not available, try pipeline
+        # If direct model failed or not available, try pipeline (but be strict)
         if self.pipeline is not None:
             try:
                 reply = self._generate_with_pipeline(message, history)
-                # Validate reply - be more permissive for pharma questions
+                # VERY STRICT validation
                 if reply and isinstance(reply, str) and reply.strip():
-                    if self._is_valid_response(reply) and not self._is_repetitive(reply):
-                        # If question is pharma-related, accept reply even if it doesn't have explicit keywords
+                    if (self._is_valid_response(reply) and 
+                        not self._is_repetitive(reply) and
+                        not self._is_incoherent(reply)):
                         if is_pharma_question:
                             if not self._is_clearly_off_topic(reply):
                                 return reply
@@ -184,6 +191,7 @@ class ChatModel:
                 traceback.print_exc()
         
         # If all attempts failed, use intelligent domain-specific fallback
+        # This ensures we ALWAYS return a good answer for pharma questions
         return self._generate_intelligent_fallback(message, is_pharma_question)
     
     def _generate_with_model(self, message: str, history: List[Dict[str, str]]) -> str:
@@ -338,16 +346,18 @@ class ChatModel:
             return ""
     
     def _is_pharma_question(self, message_lower: str) -> bool:
-        """Check if question is clearly pharmaceutique/medical"""
+        """Check if question is clearly pharmaceutique/medical - IMPROVED"""
         pharma_keywords = [
-            # Medications
+            # Medications - expanded
             'médicament', 'medicament', 'drug', 'molecule', 'principe actif', 'posologie', 'dosage',
             'antibiotique', 'antibiotic', 'amoxicilline', 'amoxicillin', 'paracétamol', 'paracetamol',
-            'aspirine', 'aspirin', 'ibuprofène', 'ibuprofen', 'médicament', 'pillule', 'comprimé',
-            # Medical terms
+            'aspirine', 'aspirin', 'ibuprofène', 'ibuprofen', 'pillule', 'comprimé', 'gélule',
+            'pénicilline', 'penicillin', 'céphalosporine', 'cephalosporin',
+            # Medical terms - expanded
             'effet secondaire', 'side effect', 'effet indésirable', 'adverse', 'contre-indication',
             'indication', 'contraindication', 'interaction', 'pharmacocinétique', 'pharmacodynamie',
-            'posologie', 'dosage', 'administration', 'voie d\'administration',
+            'posologie', 'dosage', 'administration', 'voie d\'administration', 'fonctionne', 'fonctionnement',
+            'mécanisme', 'mechanism', 'action', 'comment fonctionne', 'how does', 'how it works',
             # Medical devices
             'dispositif médical', 'dispositif medical', 'medical device', 'medtech',
             # Clinical
@@ -361,9 +371,23 @@ class ChatModel:
             # Biotech
             'biotechnologie', 'biotechnology', 'biotech', 'biologique', 'biologic',
             # General health/pharma
-            'santé', 'health', 'médical', 'medical', 'thérapeutique', 'therapeutic', 'thérapie'
+            'santé', 'health', 'médical', 'medical', 'thérapeutique', 'therapeutic', 'thérapie',
+            # Common pharma question patterns
+            'comment', 'pourquoi', 'qu\'est', 'what is', 'how', 'why'
         ]
-        return any(keyword in message_lower for keyword in pharma_keywords)
+        # Check if contains pharma keyword OR if it's a question about a known drug
+        has_keyword = any(keyword in message_lower for keyword in pharma_keywords)
+        
+        # Also check for drug names even if no other keyword
+        known_drugs = ['amoxicilline', 'amoxicillin', 'paracétamol', 'paracetamol', 'aspirine', 
+                      'aspirin', 'ibuprofène', 'ibuprofen', 'pénicilline', 'penicillin']
+        has_drug_name = any(drug in message_lower for drug in known_drugs)
+        
+        # If it's a question (contains question words) about a drug, it's pharma
+        question_words = ['comment', 'pourquoi', 'quels', 'quelle', 'quel', 'qu\'est', 'what', 'how', 'why', 'which']
+        is_question = any(qw in message_lower for qw in question_words)
+        
+        return has_keyword or (has_drug_name and is_question)
     
     def _get_domain_specific_response(self, message_lower: str) -> Optional[str]:
         """Get domain-specific response ONLY for greetings or very general questions"""
@@ -406,6 +430,56 @@ class ChatModel:
         
         return None
     
+    def _is_incoherent(self, text: str) -> bool:
+        """Check if text is incoherent (random characters, gibberish)"""
+        if not text or len(text) < 3:
+            return True
+        
+        text_lower = text.lower()
+        
+        # Check for excessive random characters
+        if len(text) > 10:
+            # Count ratio of alphabetic vs non-alphabetic
+            alpha_count = sum(1 for c in text if c.isalpha())
+            if alpha_count / len(text) < 0.4:  # Less than 40% alphabetic
+                return True
+        
+        # Check for patterns like "hahahaha", "aaaaa", excessive punctuation
+        if 'haha' in text_lower and text_lower.count('ha') > 3:
+            return True
+        
+        # Check for excessive special characters in a row
+        import re
+        if re.search(r'[.,!?;:]{4,}', text):  # 4+ punctuation in a row
+            return True
+        
+        # Check for random character sequences (like "xcvdc", "vuv.ru")
+        words = text.split()
+        if len(words) > 0:
+            incoherent_count = 0
+            for word in words:
+                clean_word = ''.join(c for c in word if c.isalnum())
+                if len(clean_word) > 4:
+                    # Check for too many consonants without vowels
+                    vowels = 'aeiouyAEIOUY'
+                    consonant_ratio = sum(1 for c in clean_word if c.isalpha() and c not in vowels) / len(clean_word) if clean_word else 0
+                    if consonant_ratio > 0.7:  # More than 70% consonants
+                        incoherent_count += 1
+            
+            if incoherent_count / len(words) > 0.3:  # More than 30% incoherent words
+                return True
+        
+        # Check for common incoherent patterns
+        incoherent_patterns = [
+            'edit', 'jamaisez', 'suhas', 'geul', 'comptite', 'duranteilleurs',
+            '1stahhaaaaaaaaanggghhhhhhh', 'ahahahhuhhhhaaardyyoooood',
+            'plenialisation', 'soutument', 'chases quand penser'
+        ]
+        if any(pattern in text_lower for pattern in incoherent_patterns):
+            return True
+        
+        return False
+    
     def _is_clearly_off_topic(self, text: str) -> bool:
         """Check if text is clearly off-topic (not pharma/medical)"""
         if not text or len(text) < 3:
@@ -429,24 +503,49 @@ class ChatModel:
         
         return has_off_topic and not has_pharma
     
+    def _get_pharma_specific_answer(self, message_lower: str) -> Optional[str]:
+        """Get specific pre-defined answers for common pharma questions"""
+        
+        # Amoxicilline - specific questions
+        if 'amoxicilline' in message_lower or 'amoxicillin' in message_lower:
+            if any(word in message_lower for word in ['fonctionne', 'fonctionnement', 'comment', 'how', 'mécanisme', 'mechanism', 'action']):
+                return "L'Amoxicilline est un antibiotique de la famille des bêta-lactamines (pénicillines). Son mécanisme d'action consiste à inhiber la synthèse de la paroi cellulaire bactérienne en se liant aux protéines de liaison aux pénicillines (PBP). Cela empêche la formation de la paroi cellulaire, entraînant la lyse et la mort des bactéries. L'Amoxicilline est efficace contre de nombreuses bactéries Gram-positives et certaines Gram-négatives. Elle est utilisée pour traiter diverses infections : respiratoires, urinaires, cutanées, et dentaires."
+            
+            if any(word in message_lower for word in ['effet', 'side effect', 'indésirable', 'adverse']):
+                return "Les effets secondaires les plus fréquents de l'Amoxicilline incluent :\n• Troubles digestifs : nausées, vomissements, diarrhée\n• Réactions cutanées : éruptions, urticaire\n• Réactions allergiques (plus rares) : anaphylaxie chez les personnes allergiques aux pénicillines\n• Candidose buccale ou vaginale (surinfection fongique)\n\nLes effets graves sont rares mais peuvent inclure des réactions anaphylactiques. En cas de réaction allergique, arrêtez le traitement et consultez immédiatement un professionnel de santé."
+            
+            if any(word in message_lower for word in ['posologie', 'dosage', 'dose', 'prendre', 'take']):
+                return "La posologie de l'Amoxicilline varie selon l'infection :\n• Adultes : généralement 500 mg à 1 g, 3 fois par jour\n• Enfants : 20-50 mg/kg/jour en 3 prises\n• Infections sévères : jusqu'à 3 g par jour en 3 prises\n• Durée : généralement 5 à 10 jours selon l'infection\n\nLa posologie exacte doit être déterminée par un professionnel de santé selon l'infection, l'âge, le poids, et la fonction rénale du patient."
+            
+            # Generic Amoxicilline answer
+            return "L'Amoxicilline est un antibiotique bêta-lactamine de la famille des pénicillines, largement utilisé pour traiter les infections bactériennes. Elle agit en inhibant la synthèse de la paroi cellulaire bactérienne. Les indications courantes incluent les infections respiratoires, urinaires, cutanées, et dentaires. Les effets secondaires fréquents sont les troubles digestifs et les réactions cutanées. La posologie varie selon l'infection et doit être prescrite par un professionnel de santé."
+        
+        # General medication questions
+        if any(word in message_lower for word in ['fonctionne', 'fonctionnement', 'comment', 'how', 'mécanisme', 'mechanism']) and any(word in message_lower for word in ['médicament', 'medicament', 'drug', 'antibiotique', 'antibiotic']):
+            return "Les médicaments fonctionnent selon différents mécanismes d'action selon leur classe :\n• Antibiotiques : inhibent la croissance ou tuent les bactéries\n• Anti-inflammatoires : réduisent l'inflammation\n• Analgésiques : soulagent la douleur\n• Antihypertenseurs : abaissent la tension artérielle\n\nChaque médicament a un mécanisme spécifique qui cible des processus biologiques particuliers dans l'organisme. Pour des informations précises sur un médicament spécifique, pouvez-vous me donner son nom?"
+        
+        # Effects side effects
+        if any(word in message_lower for word in ['effet secondaire', 'side effect', 'effet indésirable', 'adverse']) and any(word in message_lower for word in ['médicament', 'medicament', 'drug']):
+            return "Les effets secondaires des médicaments varient selon le principe actif et la classe thérapeutique. Les effets les plus fréquents incluent : troubles digestifs (nausées, diarrhée), réactions cutanées, maux de tête, et fatigue. Les effets graves sont plus rares mais peuvent inclure des réactions allergiques, des troubles hépatiques, ou des problèmes cardiaques. Pour des informations précises sur les effets secondaires d'un médicament spécifique, pouvez-vous me donner son nom?"
+        
+        # Dosage questions
+        if any(word in message_lower for word in ['posologie', 'dosage', 'dose', 'prendre']) and any(word in message_lower for word in ['médicament', 'medicament', 'drug']):
+            return "La posologie d'un médicament dépend de plusieurs facteurs :\n• Le type d'infection ou de condition traitée\n• L'âge et le poids du patient\n• La fonction rénale et hépatique\n• Les interactions médicamenteuses\n• La sévérité de la condition\n\nPour des informations précises sur la posologie d'un médicament spécifique, consultez la notice du médicament ou un professionnel de santé."
+        
+        return None
+    
     def _generate_intelligent_fallback(self, message: str, is_pharma: bool) -> str:
         """Generate intelligent fallback that doesn't repeat"""
         message_lower = message.lower().strip()
         
-        # If it's a pharma question but model failed, provide helpful context
+        # If it's a pharma question, try to get specific answer first
         if is_pharma:
-            # Extract key terms from the question
-            if 'effet' in message_lower or 'side effect' in message_lower:
-                return "Les effets secondaires des médicaments varient selon le principe actif. Pour l'Amoxicilline, les effets secondaires les plus fréquents incluent : diarrhée, nausées, éruptions cutanées, et dans de rares cas, réactions allergiques. Pour des informations précises sur un médicament spécifique, je recommande de consulter la notice du médicament ou un professionnel de santé."
+            specific_answer = self._get_pharma_specific_answer(message_lower)
+            if specific_answer:
+                return specific_answer
             
-            if any(word in message_lower for word in ['amoxicilline', 'amoxicillin', 'antibiotique', 'antibiotic']):
-                return "L'Amoxicilline est un antibiotique de la famille des pénicillines, utilisé pour traiter diverses infections bactériennes. Les effets secondaires courants peuvent inclure des troubles digestifs (nausées, diarrhée) et des réactions cutanées. La posologie dépend de l'infection traitée et doit être déterminée par un professionnel de santé."
-            
-            if 'posologie' in message_lower or 'dosage' in message_lower:
-                return "La posologie d'un médicament dépend de plusieurs facteurs : le type d'infection, l'âge du patient, la fonction rénale, et d'autres conditions médicales. Pour des informations précises sur la posologie, consultez la notice du médicament ou un professionnel de santé."
-            
-            # Generic pharma fallback
-            return f"Je comprends votre question sur '{message}'. Dans le domaine pharmaceutique, les réponses peuvent varier selon le contexte spécifique. Pourriez-vous préciser :\n• Le médicament ou dispositif concerné\n• Le contexte d'utilisation\n• L'information recherchée (effets, posologie, interactions, etc.)"
+            # Generic pharma fallback - more helpful
+            return f"Je comprends votre question sur '{message}'. Dans le domaine pharmaceutique, les informations peuvent varier selon le contexte. Pour mieux vous aider, pouvez-vous préciser :\n• Le médicament ou dispositif concerné\n• Le type d'information recherchée (mécanisme d'action, effets secondaires, posologie, interactions)\n• Le contexte d'utilisation\n\nJe peux vous fournir des informations sur les médicaments, leurs mécanismes d'action, leurs effets, et leur utilisation."
         
         # Not pharma question
         return "Je suis spécialisé uniquement dans le domaine pharmaceutique et de la santé (Pharma/MedTech). Je peux vous aider avec des questions sur les médicaments, les dispositifs médicaux, les essais cliniques, la réglementation, et la recherche pharmaceutique. Comment puis-je vous aider dans ce domaine?"
