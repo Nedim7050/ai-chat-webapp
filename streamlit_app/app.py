@@ -79,7 +79,7 @@ def load_model():
 
 
 def generate_reply(pipeline_obj, message, history):
-    """Generate a reply using the model with improved parameters"""
+    """Generate a reply using the model with strict validation"""
     try:
         from transformers import Conversation
         import torch
@@ -89,55 +89,72 @@ def generate_reply(pipeline_obj, message, history):
         if not message:
             return "Je n'ai pas compris votre message. Pouvez-vous reformuler?"
         
-        # Simple fallback for common inputs
-        message_lower = message.lower()
-        if message_lower in ['cv', 'c.v.', 'curriculum vitae']:
+        # Check for common inputs first - use fallback immediately for better UX
+        message_lower = message.lower().strip()
+        if message_lower in ['cv', 'c.v.', 'curriculum vitae', 'cv?']:
             return "Je peux vous aider avec votre CV! Que souhaitez-vous savoir? Par exemple, je peux vous aider à rédiger une section ou à améliorer votre présentation."
         
-        conversation = Conversation()
+        # Try generation with validation (max 2 attempts)
+        max_attempts = 2
+        for attempt in range(max_attempts):
+            try:
+                conversation = Conversation()
+                
+                # Add history (last 5 messages)
+                for msg in history[-5:]:
+                    if msg.get("role") == "user":
+                        conversation.add_user_input(msg.get("content", ""))
+                    elif msg.get("role") == "assistant":
+                        conversation.append_response(msg.get("content", ""))
+                
+                # Add current message
+                conversation.add_user_input(message)
+                
+                # Generate reply with better parameters
+                try:
+                    result = pipeline_obj(
+                        conversation,
+                        max_length=150,  # Shorter responses
+                        min_length=5,
+                        do_sample=True,
+                        top_p=0.9,  # More conservative
+                        top_k=30,  # More conservative
+                        temperature=0.7,  # Lower temperature
+                        repetition_penalty=1.5  # Stronger penalty
+                    )
+                except TypeError:
+                    # If pipeline doesn't accept parameters, use default
+                    result = pipeline_obj(conversation)
+                
+                # Extract reply
+                if hasattr(result, 'generated_responses') and result.generated_responses:
+                    reply = result.generated_responses[-1]
+                elif isinstance(result, Conversation):
+                    reply = result.generated_responses[-1] if result.generated_responses else None
+                else:
+                    reply = str(result)
+                
+                if reply:
+                    reply = reply.strip()
+                    # Strict validation - if valid, return it
+                    if not _is_repetitive(reply) and _is_valid_response(reply):
+                        return reply
+                    # If invalid and not last attempt, try again
+                    if attempt < max_attempts - 1:
+                        continue
+                else:
+                    # If no reply and not last attempt, try again
+                    if attempt < max_attempts - 1:
+                        continue
+                    
+            except Exception as e:
+                print(f"Error in generate_reply (attempt {attempt + 1}): {e}")
+                if attempt == max_attempts - 1:
+                    import traceback
+                    traceback.print_exc()
         
-        # Add history (last 5 messages)
-        for msg in history[-5:]:
-            if msg.get("role") == "user":
-                conversation.add_user_input(msg.get("content", ""))
-            elif msg.get("role") == "assistant":
-                conversation.append_response(msg.get("content", ""))
-        
-        # Add current message
-        conversation.add_user_input(message)
-        
-        # Generate reply with better parameters
-        try:
-            result = pipeline_obj(
-                conversation,
-                max_length=200,
-                min_length=5,
-                do_sample=True,
-                top_p=0.95,
-                top_k=50,
-                temperature=0.8,
-                repetition_penalty=1.2
-            )
-        except TypeError:
-            # If pipeline doesn't accept parameters, use default
-            result = pipeline_obj(conversation)
-        
-        # Extract reply
-        if hasattr(result, 'generated_responses') and result.generated_responses:
-            reply = result.generated_responses[-1]
-        elif isinstance(result, Conversation):
-            reply = result.generated_responses[-1] if result.generated_responses else None
-        else:
-            reply = str(result)
-        
-        if reply:
-            reply = reply.strip()
-            # Check if reply is repetitive
-            if _is_repetitive(reply):
-                return _generate_fallback(message)
-            return reply
-        else:
-            return _generate_fallback(message)
+        # If all attempts failed or returned invalid responses, use fallback
+        return _generate_fallback(message)
             
     except Exception as e:
         print(f"Error in generate_reply: {e}")
@@ -166,6 +183,108 @@ def _is_repetitive(text: str) -> bool:
         return True
     
     return False
+
+def _is_valid_response(text: str) -> bool:
+    """Strict validation to check if response is coherent and valid"""
+    if not text or len(text) < 2:
+        return False
+    
+    # Remove extra whitespace
+    text = text.strip()
+    
+    # Check length (too short or too long)
+    if len(text) < 3 or len(text) > 500:
+        return False
+    
+    # Check for excessive non-alphabetic characters (more than 30%)
+    alphabetic_chars = sum(1 for c in text if c.isalpha() or c.isspace())
+    if alphabetic_chars / len(text) < 0.5:  # Less than 50% alphabetic
+        return False
+    
+    # Check for excessive repeated characters (like "aaaaa" or ",,,,,")
+    if len(text) > 3:
+        for i in range(len(text) - 3):
+            if text[i] == text[i+1] == text[i+2] == text[i+3]:
+                # Allow some repetition but not excessive
+                if text.count(text[i]) > len(text) * 0.3:
+                    return False
+    
+    # Check for too many special characters in a row
+    special_char_count = 0
+    max_special_in_row = 0
+    for char in text:
+        if not (char.isalnum() or char.isspace()):
+            special_char_count += 1
+            if special_char_count > max_special_in_row:
+                max_special_in_row = special_char_count
+        else:
+            special_char_count = 0
+    
+    if max_special_in_row > 5:  # More than 5 special chars in a row
+        return False
+    
+    # Check for repetitive patterns (like "cv? cv? cv?")
+    words = text.lower().split()
+    if len(words) >= 3:
+        # Check if same word appears more than 3 times in short text
+        word_counts = {}
+        for word in words:
+            word_counts[word] = word_counts.get(word, 0) + 1
+        for word, count in word_counts.items():
+            if count > 3 and len(words) < 10:
+                return False
+    
+    # Check for random character sequences (like "xcvdc" or "vuv.ru")
+    # Count sequences of consonants without vowels
+    words = text.split()
+    invalid_word_count = 0
+    for word in words:
+        # Remove punctuation
+        clean_word = ''.join(c for c in word if c.isalnum())
+        if len(clean_word) > 4:
+            # Check if word has too many consonants in a row (likely random)
+            vowels = 'aeiouyAEIOUY'
+            consonant_streak = 0
+            max_consonant_streak = 0
+            for char in clean_word:
+                if char.isalpha() and char not in vowels:
+                    consonant_streak += 1
+                    if consonant_streak > max_consonant_streak:
+                        max_consonant_streak = consonant_streak
+                else:
+                    consonant_streak = 0
+            
+            # If more than 4 consonants in a row, likely invalid
+            if max_consonant_streak > 4:
+                invalid_word_count += 1
+    
+    # If more than 30% of words are invalid, reject
+    if len(words) > 0 and invalid_word_count / len(words) > 0.3:
+        return False
+    
+    # Check for common French/English words (basic validation)
+    # If text has at least some common words, it's more likely valid
+    common_words = {
+        'je', 'tu', 'il', 'elle', 'nous', 'vous', 'ils', 'elles',
+        'le', 'la', 'les', 'un', 'une', 'des',
+        'et', 'ou', 'mais', 'donc', 'car', 'parce',
+        'que', 'qui', 'quoi', 'comment', 'pourquoi', 'où',
+        'bonjour', 'salut', 'merci', 'oui', 'non',
+        'i', 'you', 'he', 'she', 'we', 'they',
+        'the', 'a', 'an', 'and', 'or', 'but',
+        'hello', 'hi', 'thanks', 'yes', 'no',
+        'cv', 'curriculum', 'vitae'
+    }
+    
+    words_lower = [w.lower().strip('.,!?;:') for w in words]
+    common_word_count = sum(1 for w in words_lower if w in common_words)
+    
+    # If no common words and text is long, likely invalid
+    if len(words) > 5 and common_word_count == 0:
+        return False
+    
+    # Final check: if it passed all checks, it's probably valid
+    return True
 
 def _generate_fallback(message: str) -> str:
     """Generate a fallback response"""

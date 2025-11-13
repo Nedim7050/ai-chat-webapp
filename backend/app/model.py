@@ -123,23 +123,43 @@ class ChatModel:
         if not message:
             return "Je n'ai pas compris votre message. Pouvez-vous reformuler?"
         
-        try:
-            # Method 1: Use direct model generation with better parameters (if model and tokenizer are loaded)
-            if self.model is not None and self.tokenizer is not None:
-                return self._generate_with_model(message, history)
-            
-            # Method 2: Use conversational pipeline
-            if self.pipeline is not None:
-                return self._generate_with_pipeline(message, history)
-            
-            raise RuntimeError("No model or pipeline available")
-            
-        except Exception as e:
-            print(f"Error in generate_reply: {str(e)}")
-            import traceback
-            traceback.print_exc()
-            # Return a helpful fallback message
-            return f"Je suis désolé, j'ai rencontré une erreur. Veuillez réessayer. ({str(e)[:50]})"
+        # Check for common inputs first - use fallback immediately for better UX
+        message_lower = message.lower().strip()
+        if message_lower in ['cv', 'c.v.', 'curriculum vitae', 'cv?']:
+            return "Je peux vous aider avec votre CV! Que souhaitez-vous savoir? Par exemple, je peux vous aider à rédiger une section ou à améliorer votre présentation."
+        
+        # Try model generation, but with strict validation
+        max_attempts = 2
+        for attempt in range(max_attempts):
+            try:
+                # Method 1: Use direct model generation with better parameters (if model and tokenizer are loaded)
+                if self.model is not None and self.tokenizer is not None:
+                    reply = self._generate_with_model(message, history)
+                    # Validate reply - if valid, return it
+                    if reply and self._is_valid_response(reply) and not self._is_repetitive(reply):
+                        return reply
+                    # If invalid and not last attempt, try again
+                    if attempt < max_attempts - 1:
+                        continue
+                
+                # Method 2: Use conversational pipeline
+                if self.pipeline is not None:
+                    reply = self._generate_with_pipeline(message, history)
+                    # Validate reply - if valid, return it
+                    if reply and self._is_valid_response(reply) and not self._is_repetitive(reply):
+                        return reply
+                    # If invalid and not last attempt, try again
+                    if attempt < max_attempts - 1:
+                        continue
+                
+            except Exception as e:
+                print(f"Error in generate_reply (attempt {attempt + 1}): {str(e)}")
+                if attempt == max_attempts - 1:
+                    import traceback
+                    traceback.print_exc()
+        
+        # If all attempts failed or returned invalid responses, use fallback
+        return self._generate_simple_fallback(message)
     
     def _generate_with_model(self, message: str, history: List[Dict[str, str]]) -> str:
         """Generate reply using direct model inference with better parameters"""
@@ -191,19 +211,20 @@ class ChatModel:
         device = next(self.model.parameters()).device
         bot_input_ids = bot_input_ids.to(device)
         
-        # Generate response with better parameters
+        # Generate response with better parameters - more conservative
         with torch.no_grad():
             chat_history_ids = self.model.generate(
                 bot_input_ids,
-                max_length=bot_input_ids.shape[1] + 100,  # Generate up to 100 new tokens
+                max_length=bot_input_ids.shape[1] + 50,  # Generate up to 50 new tokens (shorter)
                 pad_token_id=self.tokenizer.eos_token_id,
                 do_sample=True,
-                top_p=0.95,
-                top_k=50,
-                temperature=0.8,
-                no_repeat_ngram_size=3,
-                repetition_penalty=1.2,
-                length_penalty=1.0
+                top_p=0.9,  # More conservative
+                top_k=30,  # More conservative
+                temperature=0.7,  # Lower temperature for more coherent responses
+                no_repeat_ngram_size=4,  # Prevent 4-gram repetition
+                repetition_penalty=1.5,  # Stronger penalty
+                length_penalty=1.2,  # Prefer shorter responses
+                early_stopping=True  # Stop early if EOS token
             )
         
         # Decode only the new part
@@ -213,13 +234,16 @@ class ChatModel:
         # Clean up reply
         reply = reply.strip()
         
-        # Validate reply
+        # Strict validation - if not valid, use fallback immediately
         if not reply or len(reply) < 2:
-            # Fallback to simple response
             return self._generate_simple_fallback(message)
         
-        # Remove repeated characters/words
+        # Check if repetitive
         if self._is_repetitive(reply):
+            return self._generate_simple_fallback(message)
+        
+        # Strict validation for coherence
+        if not self._is_valid_response(reply):
             return self._generate_simple_fallback(message)
         
         return reply
@@ -261,10 +285,14 @@ class ChatModel:
             else:
                 reply = str(result)
             
-            if reply and reply.strip() and not self._is_repetitive(reply):
-                return reply.strip()
-            else:
-                return self._generate_simple_fallback(message)
+            if reply and reply.strip():
+                reply = reply.strip()
+                # Validate reply before returning
+                if not self._is_repetitive(reply) and self._is_valid_response(reply):
+                    return reply
+            
+            # If validation fails, use fallback
+            return self._generate_simple_fallback(message)
                 
         except Exception as e:
             print(f"Pipeline generation error: {e}")
@@ -308,4 +336,106 @@ class ChatModel:
             return True
         
         return False
+    
+    def _is_valid_response(self, text: str) -> bool:
+        """Strict validation to check if response is coherent and valid"""
+        if not text or len(text) < 2:
+            return False
+        
+        # Remove extra whitespace
+        text = text.strip()
+        
+        # Check length (too short or too long)
+        if len(text) < 3 or len(text) > 500:
+            return False
+        
+        # Check for excessive non-alphabetic characters (more than 30%)
+        alphabetic_chars = sum(1 for c in text if c.isalpha() or c.isspace())
+        if alphabetic_chars / len(text) < 0.5:  # Less than 50% alphabetic
+            return False
+        
+        # Check for excessive repeated characters (like "aaaaa" or ",,,,,")
+        if len(text) > 3:
+            for i in range(len(text) - 3):
+                if text[i] == text[i+1] == text[i+2] == text[i+3]:
+                    # Allow some repetition but not excessive
+                    if text.count(text[i]) > len(text) * 0.3:
+                        return False
+        
+        # Check for too many special characters in a row
+        special_char_count = 0
+        max_special_in_row = 0
+        for char in text:
+            if not (char.isalnum() or char.isspace()):
+                special_char_count += 1
+                if special_char_count > max_special_in_row:
+                    max_special_in_row = special_char_count
+            else:
+                special_char_count = 0
+        
+        if max_special_in_row > 5:  # More than 5 special chars in a row
+            return False
+        
+        # Check for repetitive patterns (like "cv? cv? cv?")
+        words = text.lower().split()
+        if len(words) >= 3:
+            # Check if same word appears more than 3 times in short text
+            word_counts = {}
+            for word in words:
+                word_counts[word] = word_counts.get(word, 0) + 1
+            for word, count in word_counts.items():
+                if count > 3 and len(words) < 10:
+                    return False
+        
+        # Check for random character sequences (like "xcvdc" or "vuv.ru")
+        # Count sequences of consonants without vowels
+        words = text.split()
+        invalid_word_count = 0
+        for word in words:
+            # Remove punctuation
+            clean_word = ''.join(c for c in word if c.isalnum())
+            if len(clean_word) > 4:
+                # Check if word has too many consonants in a row (likely random)
+                vowels = 'aeiouyAEIOUY'
+                consonant_streak = 0
+                max_consonant_streak = 0
+                for char in clean_word:
+                    if char.isalpha() and char not in vowels:
+                        consonant_streak += 1
+                        if consonant_streak > max_consonant_streak:
+                            max_consonant_streak = consonant_streak
+                    else:
+                        consonant_streak = 0
+                
+                # If more than 4 consonants in a row, likely invalid
+                if max_consonant_streak > 4:
+                    invalid_word_count += 1
+        
+        # If more than 30% of words are invalid, reject
+        if len(words) > 0 and invalid_word_count / len(words) > 0.3:
+            return False
+        
+        # Check for common French/English words (basic validation)
+        # If text has at least some common words, it's more likely valid
+        common_words = {
+            'je', 'tu', 'il', 'elle', 'nous', 'vous', 'ils', 'elles',
+            'le', 'la', 'les', 'un', 'une', 'des',
+            'et', 'ou', 'mais', 'donc', 'car', 'parce',
+            'que', 'qui', 'quoi', 'comment', 'pourquoi', 'où',
+            'bonjour', 'salut', 'merci', 'oui', 'non',
+            'i', 'you', 'he', 'she', 'we', 'they',
+            'the', 'a', 'an', 'and', 'or', 'but',
+            'hello', 'hi', 'thanks', 'yes', 'no',
+            'cv', 'curriculum', 'vitae'
+        }
+        
+        words_lower = [w.lower().strip('.,!?;:') for w in words]
+        common_word_count = sum(1 for w in words_lower if w in common_words)
+        
+        # If no common words and text is long, likely invalid
+        if len(words) > 5 and common_word_count == 0:
+            return False
+        
+        # Final check: if it passed all checks, it's probably valid
+        return True
 
