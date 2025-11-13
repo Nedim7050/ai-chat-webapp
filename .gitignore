@@ -42,8 +42,7 @@ Thumbs.db
 # models/
 
 # Streamlit
-# .streamlit/  # Uncomment if you don't want to track config
-.streamlit/secrets.toml  # Ne jamais commiter les secrets
+.streamlit/
 
 # Logs
 *.log
