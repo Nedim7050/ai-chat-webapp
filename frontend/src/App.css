@@ -43,9 +43,58 @@ body {
   align-items: center;
 }
 
+.header-left {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
 .chat-header h1 {
   font-size: 24px;
   font-weight: 600;
+  margin: 0;
+}
+
+.connection-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  opacity: 0.9;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.status-dot.connected {
+  background: #4ade80;
+  box-shadow: 0 0 8px #4ade80;
+}
+
+.status-dot.loading {
+  background: #fbbf24;
+  animation: blink 1s infinite;
+}
+
+.status-dot.disconnected {
+  background: #ef4444;
+}
+
+.status-dot.checking {
+  background: #94a3b8;
+}
+
+@keyframes blink {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.3;
+  }
 }
 
 .clear-btn {

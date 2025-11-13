@@ -34,10 +34,19 @@ app = FastAPI(
 # CORS middleware for React frontend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3000", "http://localhost:5174"],
+    allow_origins=[
+        "http://localhost:5173",
+        "http://localhost:3000",
+        "http://localhost:5174",
+        "http://127.0.0.1:5173",
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:5174",
+        "*"  # Allow all origins in development (remove in production)
+    ],
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
+    expose_headers=["*"],
 )
 
 
@@ -66,7 +75,10 @@ async def chat(request: ChatRequest):
     Chat endpoint: accepts message and history, returns AI reply
     """
     if not chat_model.is_loaded():
-        raise HTTPException(status_code=503, detail="Model not loaded yet")
+        raise HTTPException(
+            status_code=503, 
+            detail="Model not loaded yet. Please wait a few moments and try again."
+        )
     
     if not request.message or not request.message.strip():
         raise HTTPException(status_code=400, detail="Message cannot be empty")
@@ -75,8 +87,11 @@ async def chat(request: ChatRequest):
         # Get reply from model
         reply = chat_model.generate_reply(
             message=request.message,
-            history=request.history
+            history=request.history or []
         )
+        
+        if not reply or not reply.strip():
+            reply = "Désolé, je n'ai pas pu générer de réponse. Veuillez réessayer."
         
         return ChatResponse(
             reply=reply,
@@ -85,8 +100,16 @@ async def chat(request: ChatRequest):
                 "tokens": len(reply.split())  # Approximate token count
             }
         )
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error generating reply: {str(e)}")
+        print(f"Error generating reply: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Error generating reply: {str(e)}"
+        )
 
 
 if __name__ == "__main__":
