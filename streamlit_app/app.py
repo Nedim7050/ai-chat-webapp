@@ -118,6 +118,24 @@ def get_domain_specific_response(message_lower: str):
     
     return None
 
+def is_clearly_off_topic(text: str) -> bool:
+    """Check if text is clearly off-topic"""
+    if not text or len(text) < 3:
+        return False
+    text_lower = text.lower()
+    off_topic_keywords = [
+        'cuisine', 'cooking', 'recette', 'recipe', 'restaurant',
+        'sport', 'football', 'basketball', 'tennis',
+        'musique', 'music', 'film', 'movie', 'cinéma',
+        'voyage', 'travel', 'vacances', 'vacation',
+        'cv', 'curriculum', 'lettre de motivation', 'cover letter',
+        'informatique', 'computer', 'programmation', 'programming',
+        'voiture', 'car', 'automobile'
+    ]
+    has_off_topic = any(keyword in text_lower for keyword in off_topic_keywords)
+    has_pharma = is_domain_related(text)
+    return has_off_topic and not has_pharma
+
 def is_domain_related(text: str) -> bool:
     """Check if text is related to Pharma/MedTech domain"""
     if not text or len(text) < 3:
@@ -158,6 +176,65 @@ def generate_domain_fallback(message: str) -> str:
     
     return f"Je suis désolé, mais je suis spécialisé uniquement dans le domaine pharmaceutique et de la santé (Pharma/MedTech). Je ne peux répondre qu'aux questions concernant :\n• Les médicaments et principes actifs\n• Les dispositifs médicaux (MedTech)\n• Les essais cliniques et la recherche pharmaceutique\n• La réglementation (FDA, EMA, ANSM)\n• La pharmacovigilance et la sécurité des médicaments\n• La biotechnologie pharmaceutique\n• Les innovations en santé\n\nVotre question '{message}' ne semble pas être liée à ce domaine. Pourriez-vous reformuler votre question dans le contexte pharmaceutique et de la santé?"
 
+def is_pharma_question(message_lower: str) -> bool:
+    """Check if question is clearly pharmaceutique/medical"""
+    pharma_keywords = [
+        'médicament', 'medicament', 'drug', 'molecule', 'principe actif', 'posologie', 'dosage',
+        'antibiotique', 'antibiotic', 'amoxicilline', 'amoxicillin', 'paracétamol', 'paracetamol',
+        'aspirine', 'aspirin', 'ibuprofène', 'ibuprofen', 'pillule', 'comprimé', 'gélule',
+        'pénicilline', 'penicillin', 'céphalosporine', 'cephalosporin',
+        'effet secondaire', 'side effect', 'effet indésirable', 'adverse', 'contre-indication',
+        'indication', 'contraindication', 'interaction', 'pharmacocinétique', 'pharmacodynamie',
+        'posologie', 'dosage', 'administration', 'voie d\'administration', 'fonctionne', 'fonctionnement',
+        'mécanisme', 'mechanism', 'action', 'comment fonctionne', 'how does', 'how it works',
+        'dispositif médical', 'dispositif medical', 'medical device', 'medtech',
+        'essai clinique', 'clinical trial', 'étude clinique', 'phase', 'rct',
+        'réglementation', 'regulation', 'fda', 'ema', 'ansm', 'amm', 'autorisation',
+        'recherche', 'research', 'développement', 'development', 'r&d',
+        'pharmacovigilance', 'sécurité', 'safety', 'surveillance', 'toxicité',
+        'biotechnologie', 'biotechnology', 'biotech', 'biologique', 'biologic',
+        'santé', 'health', 'médical', 'medical', 'thérapeutique', 'therapeutic', 'thérapie',
+        'comment', 'pourquoi', 'qu\'est', 'what is', 'how', 'why'
+    ]
+    has_keyword = any(keyword in message_lower for keyword in pharma_keywords)
+    known_drugs = ['amoxicilline', 'amoxicillin', 'paracétamol', 'paracetamol', 'aspirine', 
+                  'aspirin', 'ibuprofène', 'ibuprofen', 'pénicilline', 'penicillin']
+    has_drug_name = any(drug in message_lower for drug in known_drugs)
+    question_words = ['comment', 'pourquoi', 'quels', 'quelle', 'quel', 'qu\'est', 'what', 'how', 'why', 'which']
+    is_question = any(qw in message_lower for qw in question_words)
+    return has_keyword or (has_drug_name and is_question)
+
+def get_pharma_specific_answer(message_lower: str):
+    """Get specific pre-defined answers for common pharma questions"""
+    if 'amoxicilline' in message_lower or 'amoxicillin' in message_lower:
+        if any(word in message_lower for word in ['fonctionne', 'fonctionnement', 'comment', 'how', 'mécanisme', 'mechanism', 'action']):
+            return "L'Amoxicilline est un antibiotique de la famille des bêta-lactamines (pénicillines). Son mécanisme d'action consiste à inhiber la synthèse de la paroi cellulaire bactérienne en se liant aux protéines de liaison aux pénicillines (PBP). Cela empêche la formation de la paroi cellulaire, entraînant la lyse et la mort des bactéries. L'Amoxicilline est efficace contre de nombreuses bactéries Gram-positives et certaines Gram-négatives. Elle est utilisée pour traiter diverses infections : respiratoires, urinaires, cutanées, et dentaires."
+        if any(word in message_lower for word in ['effet', 'side effect', 'indésirable', 'adverse']):
+            return "Les effets secondaires les plus fréquents de l'Amoxicilline incluent :\n• Troubles digestifs : nausées, vomissements, diarrhée\n• Réactions cutanées : éruptions, urticaire\n• Réactions allergiques (plus rares) : anaphylaxie chez les personnes allergiques aux pénicillines\n• Candidose buccale ou vaginale (surinfection fongique)\n\nLes effets graves sont rares mais peuvent inclure des réactions anaphylactiques. En cas de réaction allergique, arrêtez le traitement et consultez immédiatement un professionnel de santé."
+        if any(word in message_lower for word in ['posologie', 'dosage', 'dose', 'prendre', 'take']):
+            return "La posologie de l'Amoxicilline varie selon l'infection :\n• Adultes : généralement 500 mg à 1 g, 3 fois par jour\n• Enfants : 20-50 mg/kg/jour en 3 prises\n• Infections sévères : jusqu'à 3 g par jour en 3 prises\n• Durée : généralement 5 à 10 jours selon l'infection\n\nLa posologie exacte doit être déterminée par un professionnel de santé selon l'infection, l'âge, le poids, et la fonction rénale du patient."
+        return "L'Amoxicilline est un antibiotique bêta-lactamine de la famille des pénicillines, largement utilisé pour traiter les infections bactériennes. Elle agit en inhibant la synthèse de la paroi cellulaire bactérienne. Les indications courantes incluent les infections respiratoires, urinaires, cutanées, et dentaires. Les effets secondaires fréquents sont les troubles digestifs et les réactions cutanées. La posologie varie selon l'infection et doit être prescrite par un professionnel de santé."
+    return None
+
+def is_incoherent(text: str) -> bool:
+    """Check if text is incoherent"""
+    if not text or len(text) < 3:
+        return True
+    text_lower = text.lower()
+    if len(text) > 10:
+        alpha_count = sum(1 for c in text if c.isalpha())
+        if alpha_count / len(text) < 0.4:
+            return True
+    import re
+    if re.search(r'[.,!?;:]{4,}', text):
+        return True
+    incoherent_patterns = ['edit', 'jamaisez', 'suhas', 'geul', 'comptite', 'duranteilleurs',
+                          '1stahhaaaaaaaaanggghhhhhhh', 'ahahahhuhhhhaaardyyoooood',
+                          'plenialisation', 'soutument', 'chases quand penser']
+    if any(pattern in text_lower for pattern in incoherent_patterns):
+        return True
+    return False
+
 def generate_reply(pipeline_obj, message, history):
     """Generate a reply using the model with domain-specific validation"""
     try:
@@ -167,14 +244,35 @@ def generate_reply(pipeline_obj, message, history):
         # Clean message
         message = message.strip()
         if not message:
-            return "Je n'ai pas compris votre message. Pouvez-vous reformuler votre question concernant votre CV ou votre lettre de motivation?"
+            return "Je n'ai pas compris votre message. Pouvez-vous reformuler votre question concernant le domaine pharmaceutique et de la santé (Pharma/MedTech)?"
         
         message_lower = message.lower().strip()
         
+        # Check if this exact question was already asked
+        if history:
+            recent_user_messages = [msg.get("content", "").lower().strip() for msg in history[-10:] if msg.get("role") == "user"]
+            if message_lower in recent_user_messages:
+                return "Vous avez déjà posé cette question. Pourriez-vous reformuler ou préciser votre demande?"
+        
+        # Check if pharma question
+        is_pharma = is_pharma_question(message_lower)
+        
         # Check for domain-specific inputs first
-        domain_reply = get_domain_specific_response(message_lower)
-        if domain_reply:
-            return domain_reply
+        if not is_pharma:
+            domain_reply = get_domain_specific_response(message_lower)
+            if domain_reply:
+                return domain_reply
+        
+        # For pharma questions, use pre-defined answers first
+        if is_pharma:
+            specific_answer = get_pharma_specific_answer(message_lower)
+            if specific_answer:
+                # Check if we already gave this answer
+                if history:
+                    recent_assistant_messages = [msg.get("content", "").strip() for msg in history[-5:] if msg.get("role") == "assistant"]
+                    if specific_answer in recent_assistant_messages:
+                        return f"Comme mentionné précédemment, {specific_answer[:100]}... Pour plus de détails, pouvez-vous préciser votre question?"
+                return specific_answer
         
         # Try generation with validation (max 2 attempts)
         max_attempts = 2
@@ -218,10 +316,17 @@ def generate_reply(pipeline_obj, message, history):
                 
                 if reply:
                     reply = reply.strip()
-                    # Strict validation - if valid and domain-related, return it
-                    if not _is_repetitive(reply) and _is_valid_response(reply):
-                        if is_domain_related(reply):
-                            return reply
+                    # VERY STRICT validation - reject incoherent responses
+                    if (not _is_repetitive(reply) and 
+                        _is_valid_response(reply) and
+                        not is_incoherent(reply)):
+                        if is_pharma:
+                            # For pharma questions, accept if not clearly off-topic
+                            if not is_clearly_off_topic(reply):
+                                return reply
+                        else:
+                            if is_domain_related(reply):
+                                return reply
                     # If invalid and not last attempt, try again
                     if attempt < max_attempts - 1:
                         continue
@@ -236,7 +341,11 @@ def generate_reply(pipeline_obj, message, history):
                     import traceback
                     traceback.print_exc()
         
-        # If all attempts failed or returned invalid responses, use domain fallback
+        # If all attempts failed, use intelligent fallback
+        if is_pharma:
+            specific_answer = get_pharma_specific_answer(message_lower)
+            if specific_answer:
+                return specific_answer
         return generate_domain_fallback(message)
             
     except Exception as e:
