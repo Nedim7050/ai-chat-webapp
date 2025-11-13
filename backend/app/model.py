@@ -131,10 +131,15 @@ class ChatModel:
         
         message_lower = message.lower().strip()
         
-        # Check for domain-specific inputs first - use specialized fallback immediately
-        domain_reply = self._get_domain_specific_response(message_lower)
-        if domain_reply:
-            return domain_reply
+        # Check if message is clearly pharmaceutique - if yes, try model generation first
+        is_pharma_question = self._is_pharma_question(message_lower)
+        
+        # Only use generic domain response for greetings or very general questions
+        # For specific pharma questions, let the model try to answer
+        if not is_pharma_question:
+            domain_reply = self._get_domain_specific_response(message_lower)
+            if domain_reply:
+                return domain_reply
         
         # Try model generation - be more permissive for pharma questions
         # First, try direct model generation if available
