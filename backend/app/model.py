@@ -129,124 +129,121 @@ class ChatModel:
             return "Je peux vous aider avec votre CV! Que souhaitez-vous savoir? Par exemple, je peux vous aider à rédiger une section ou à améliorer votre présentation."
         
         # Try model generation, but with strict validation
-        max_attempts = 2
-        for attempt in range(max_attempts):
+        # First, try direct model generation if available
+        if self.model is not None and self.tokenizer is not None:
             try:
-                # Method 1: Use direct model generation with better parameters (if model and tokenizer are loaded)
-                if self.model is not None and self.tokenizer is not None:
-                    reply = self._generate_with_model(message, history)
-                    # Validate reply - if valid, return it
-                    if reply and self._is_valid_response(reply) and not self._is_repetitive(reply):
+                reply = self._generate_with_model(message, history)
+                # Validate reply - if valid, return it
+                if reply and isinstance(reply, str) and reply.strip():
+                    if self._is_valid_response(reply) and not self._is_repetitive(reply):
                         return reply
-                    # If invalid and not last attempt, try again
-                    if attempt < max_attempts - 1:
-                        continue
-                
-                # Method 2: Use conversational pipeline
-                if self.pipeline is not None:
-                    reply = self._generate_with_pipeline(message, history)
-                    # Validate reply - if valid, return it
-                    if reply and self._is_valid_response(reply) and not self._is_repetitive(reply):
-                        return reply
-                    # If invalid and not last attempt, try again
-                    if attempt < max_attempts - 1:
-                        continue
-                
             except Exception as e:
-                print(f"Error in generate_reply (attempt {attempt + 1}): {str(e)}")
-                if attempt == max_attempts - 1:
-                    import traceback
-                    traceback.print_exc()
+                print(f"Error in _generate_with_model: {str(e)}")
+                import traceback
+                traceback.print_exc()
+        
+        # If direct model failed or not available, try pipeline
+        if self.pipeline is not None:
+            try:
+                reply = self._generate_with_pipeline(message, history)
+                # Validate reply - if valid, return it
+                if reply and isinstance(reply, str) and reply.strip():
+                    if self._is_valid_response(reply) and not self._is_repetitive(reply):
+                        return reply
+            except Exception as e:
+                print(f"Error in _generate_with_pipeline: {str(e)}")
+                import traceback
+                traceback.print_exc()
         
         # If all attempts failed or returned invalid responses, use fallback
+        # This ensures we always return a response
         return self._generate_simple_fallback(message)
     
     def _generate_with_model(self, message: str, history: List[Dict[str, str]]) -> str:
         """Generate reply using direct model inference with better parameters"""
         import torch
         
-        # Build conversation context
-        chat_history_ids = None
-        
-        # Process history
-        for msg in history[-5:]:  # Last 5 messages for context
-            if msg.get("role") == "user":
-                user_input = msg.get("content", "").strip()
-                if user_input:
-                    # Encode user input
-                    new_user_input_ids = self.tokenizer.encode(
-                        user_input + self.tokenizer.eos_token,
-                        return_tensors='pt'
-                    )
-                    if chat_history_ids is None:
-                        chat_history_ids = new_user_input_ids
-                    else:
-                        chat_history_ids = torch.cat([chat_history_ids, new_user_input_ids], dim=-1)
+        try:
+            # Build conversation context
+            chat_history_ids = None
             
-            elif msg.get("role") == "assistant":
-                bot_response = msg.get("content", "").strip()
-                if bot_response:
-                    # Encode bot response
-                    bot_input_ids = self.tokenizer.encode(
-                        bot_response + self.tokenizer.eos_token,
-                        return_tensors='pt'
-                    )
-                    chat_history_ids = torch.cat([chat_history_ids, bot_input_ids], dim=-1)
-        
-        # Encode current user message
-        new_user_input_ids = self.tokenizer.encode(
-            message + self.tokenizer.eos_token,
-            return_tensors='pt'
-        )
-        
-        if chat_history_ids is not None:
-            # Truncate history if too long (keep last 512 tokens)
-            if chat_history_ids.shape[1] > 256:
-                chat_history_ids = chat_history_ids[:, -256:]
-            bot_input_ids = torch.cat([chat_history_ids, new_user_input_ids], dim=-1)
-        else:
-            bot_input_ids = new_user_input_ids
-        
-        # Move to device
-        device = next(self.model.parameters()).device
-        bot_input_ids = bot_input_ids.to(device)
-        
-        # Generate response with better parameters - more conservative
-        with torch.no_grad():
-            chat_history_ids = self.model.generate(
-                bot_input_ids,
-                max_length=bot_input_ids.shape[1] + 50,  # Generate up to 50 new tokens (shorter)
-                pad_token_id=self.tokenizer.eos_token_id,
-                do_sample=True,
-                top_p=0.9,  # More conservative
-                top_k=30,  # More conservative
-                temperature=0.7,  # Lower temperature for more coherent responses
-                no_repeat_ngram_size=4,  # Prevent 4-gram repetition
-                repetition_penalty=1.5,  # Stronger penalty
-                length_penalty=1.2,  # Prefer shorter responses
-                early_stopping=True  # Stop early if EOS token
+            # Process history
+            for msg in history[-5:]:  # Last 5 messages for context
+                if msg.get("role") == "user":
+                    user_input = msg.get("content", "").strip()
+                    if user_input:
+                        # Encode user input
+                        new_user_input_ids = self.tokenizer.encode(
+                            user_input + self.tokenizer.eos_token,
+                            return_tensors='pt'
+                        )
+                        if chat_history_ids is None:
+                            chat_history_ids = new_user_input_ids
+                        else:
+                            chat_history_ids = torch.cat([chat_history_ids, new_user_input_ids], dim=-1)
+                
+                elif msg.get("role") == "assistant":
+                    bot_response = msg.get("content", "").strip()
+                    if bot_response:
+                        # Encode bot response
+                        bot_input_ids = self.tokenizer.encode(
+                            bot_response + self.tokenizer.eos_token,
+                            return_tensors='pt'
+                        )
+                        if chat_history_ids is not None:
+                            chat_history_ids = torch.cat([chat_history_ids, bot_input_ids], dim=-1)
+            
+            # Encode current user message
+            new_user_input_ids = self.tokenizer.encode(
+                message + self.tokenizer.eos_token,
+                return_tensors='pt'
             )
-        
-        # Decode only the new part
-        new_tokens = chat_history_ids[:, bot_input_ids.shape[1]:]
-        reply = self.tokenizer.decode(new_tokens[0], skip_special_tokens=True)
-        
-        # Clean up reply
-        reply = reply.strip()
-        
-        # Strict validation - if not valid, use fallback immediately
-        if not reply or len(reply) < 2:
-            return self._generate_simple_fallback(message)
-        
-        # Check if repetitive
-        if self._is_repetitive(reply):
-            return self._generate_simple_fallback(message)
-        
-        # Strict validation for coherence
-        if not self._is_valid_response(reply):
-            return self._generate_simple_fallback(message)
-        
-        return reply
+            
+            if chat_history_ids is not None:
+                # Truncate history if too long (keep last 256 tokens)
+                if chat_history_ids.shape[1] > 256:
+                    chat_history_ids = chat_history_ids[:, -256:]
+                bot_input_ids = torch.cat([chat_history_ids, new_user_input_ids], dim=-1)
+            else:
+                bot_input_ids = new_user_input_ids
+            
+            # Move to device
+            device = next(self.model.parameters()).device
+            bot_input_ids = bot_input_ids.to(device)
+            
+            # Generate response with better parameters - more conservative
+            with torch.no_grad():
+                chat_history_ids = self.model.generate(
+                    bot_input_ids,
+                    max_length=bot_input_ids.shape[1] + 50,  # Generate up to 50 new tokens (shorter)
+                    pad_token_id=self.tokenizer.eos_token_id,
+                    do_sample=True,
+                    top_p=0.9,  # More conservative
+                    top_k=30,  # More conservative
+                    temperature=0.7,  # Lower temperature for more coherent responses
+                    no_repeat_ngram_size=4,  # Prevent 4-gram repetition
+                    repetition_penalty=1.5,  # Stronger penalty
+                    length_penalty=1.2,  # Prefer shorter responses
+                    early_stopping=True  # Stop early if EOS token
+                )
+            
+            # Decode only the new part
+            new_tokens = chat_history_ids[:, bot_input_ids.shape[1]:]
+            reply = self.tokenizer.decode(new_tokens[0], skip_special_tokens=True)
+            
+            # Clean up reply
+            if reply:
+                reply = reply.strip()
+            
+            # Return reply (validation will be done in generate_reply)
+            return reply if reply else ""
+            
+        except Exception as e:
+            print(f"Error in _generate_with_model: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            # Return empty string to trigger fallback
+            return ""
     
     def _generate_with_pipeline(self, message: str, history: List[Dict[str, str]]) -> str:
         """Generate reply using pipeline"""
@@ -266,16 +263,20 @@ class ChatModel:
             conversation.add_user_input(message)
             
             # Generate with better parameters
-            result = self.pipeline(
-                conversation,
-                max_length=200,
-                min_length=5,
-                do_sample=True,
-                top_p=0.95,
-                top_k=50,
-                temperature=0.8,
-                repetition_penalty=1.2
-            )
+            try:
+                result = self.pipeline(
+                    conversation,
+                    max_length=150,
+                    min_length=5,
+                    do_sample=True,
+                    top_p=0.9,
+                    top_k=30,
+                    temperature=0.7,
+                    repetition_penalty=1.5
+                )
+            except TypeError:
+                # If pipeline doesn't accept parameters, use default
+                result = self.pipeline(conversation)
             
             # Extract reply
             if hasattr(result, 'generated_responses') and result.generated_responses:
@@ -285,18 +286,17 @@ class ChatModel:
             else:
                 reply = str(result)
             
-            if reply and reply.strip():
-                reply = reply.strip()
-                # Validate reply before returning
-                if not self._is_repetitive(reply) and self._is_valid_response(reply):
-                    return reply
-            
-            # If validation fails, use fallback
-            return self._generate_simple_fallback(message)
+            # Return reply (validation will be done in generate_reply)
+            if reply:
+                return reply.strip()
+            return ""
                 
         except Exception as e:
             print(f"Pipeline generation error: {e}")
-            return self._generate_simple_fallback(message)
+            import traceback
+            traceback.print_exc()
+            # Return empty string to trigger fallback
+            return ""
     
     def _generate_simple_fallback(self, message: str) -> str:
         """Generate a simple fallback response"""
@@ -394,7 +394,7 @@ class ChatModel:
         for word in words:
             # Remove punctuation
             clean_word = ''.join(c for c in word if c.isalnum())
-            if len(clean_word) > 4:
+            if len(clean_word) > 5:  # Only check longer words
                 # Check if word has too many consonants in a row (likely random)
                 vowels = 'aeiouyAEIOUY'
                 consonant_streak = 0
@@ -407,12 +407,12 @@ class ChatModel:
                     else:
                         consonant_streak = 0
                 
-                # If more than 4 consonants in a row, likely invalid
-                if max_consonant_streak > 4:
+                # If more than 5 consonants in a row, likely invalid
+                if max_consonant_streak > 5:
                     invalid_word_count += 1
         
-        # If more than 30% of words are invalid, reject
-        if len(words) > 0 and invalid_word_count / len(words) > 0.3:
+        # If more than 40% of words are invalid, reject (more lenient)
+        if len(words) > 0 and invalid_word_count / len(words) > 0.4:
             return False
         
         # Check for common French/English words (basic validation)
@@ -426,14 +426,18 @@ class ChatModel:
             'i', 'you', 'he', 'she', 'we', 'they',
             'the', 'a', 'an', 'and', 'or', 'but',
             'hello', 'hi', 'thanks', 'yes', 'no',
-            'cv', 'curriculum', 'vitae'
+            'cv', 'curriculum', 'vitae', 'peux', 'peut', 'peuvent',
+            'aide', 'aider', 'aide', 'savoir', 'sais', 'savez',
+            'votre', 'votre', 'vos', 'mon', 'ma', 'mes',
+            'avec', 'sans', 'pour', 'dans', 'sur', 'sous'
         }
         
         words_lower = [w.lower().strip('.,!?;:') for w in words]
         common_word_count = sum(1 for w in words_lower if w in common_words)
         
-        # If no common words and text is long, likely invalid
-        if len(words) > 5 and common_word_count == 0:
+        # If no common words and text is long (more than 8 words), likely invalid
+        # But be more lenient for short responses
+        if len(words) > 8 and common_word_count == 0:
             return False
         
         # Final check: if it passed all checks, it's probably valid
