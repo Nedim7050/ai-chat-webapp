@@ -90,8 +90,14 @@ def generate_with_openai_api(message: str, history: list, api_key: str):
         
         return response.choices[0].message.content.strip()
     except Exception as e:
-        st.error(f"Erreur API OpenAI: {str(e)}")
-        return None
+        error_str = str(e)
+        # Check for quota error
+        if "429" in error_str or "quota" in error_str.lower() or "insufficient_quota" in error_str.lower():
+            st.warning("⚠️ Quota API OpenAI dépassé. Utilisation du modèle local en fallback.")
+            return None  # Will trigger fallback to local model or predefined answers
+        else:
+            st.warning(f"⚠️ Erreur API OpenAI: {error_str[:100]}. Utilisation du fallback.")
+            return None
 
 @st.cache_resource
 def load_model():
@@ -254,6 +260,17 @@ def is_pharma_question(message_lower: str) -> bool:
 
 def get_pharma_specific_answer(message_lower: str):
     """Get specific pre-defined answers for common pharma questions - EXPANDED"""
+    # Famotidine/Famodine - specific questions
+    if 'famodine' in message_lower or 'famotidine' in message_lower:
+        if any(word in message_lower for word in ['c\'est quoi', 'qu\'est', 'what is', 'what', 'quel', 'quelle']):
+            return "La Famotidine (ou Famodine) est un médicament de la classe des antagonistes des récepteurs H2 de l'histamine. Elle est utilisée pour réduire la production d'acide gastrique. **Indications principales :**\n• Traitement des ulcères gastriques et duodénaux\n• Réduction de l'acidité gastrique (reflux gastro-œsophagien)\n• Prévention des ulcères de stress\n• Traitement du syndrome de Zollinger-Ellison\n\n**Posologie typique :** 20-40 mg, 1 à 2 fois par jour selon l'indication. La posologie exacte doit être déterminée par un professionnel de santé."
+        if any(word in message_lower for word in ['effet', 'side effect', 'indésirable', 'adverse', 'secondaire']):
+            return "Les effets secondaires de la Famotidine peuvent inclure :\n• Troubles digestifs : nausées, diarrhée, constipation\n• Maux de tête, vertiges\n• Fatigue, somnolence\n• Rarement : réactions allergiques, troubles hépatiques\n\nLes effets graves sont rares. En cas d'effets indésirables persistants, consultez un professionnel de santé."
+        if any(word in message_lower for word in ['posologie', 'dosage', 'dose', 'prendre', 'utiliser']):
+            return "La posologie de la Famotidine varie selon l'indication :\n• Ulcères : 40 mg le soir ou 20 mg matin et soir\n• Reflux gastro-œsophagien : 20-40 mg, 1 à 2 fois par jour\n• Prévention : 20 mg le soir\n• Durée : selon l'indication, généralement 4 à 8 semaines\n\nLa posologie exacte doit être déterminée par un professionnel de santé."
+        # Generic Famotidine answer
+        return "La Famotidine (Famodine) est un anti-ulcéreux de la classe des antagonistes H2, utilisé pour réduire l'acidité gastrique. Elle est indiquée pour le traitement des ulcères gastriques et duodénaux, le reflux gastro-œsophagien, et la prévention des ulcères de stress. La posologie typique est de 20-40 mg, 1 à 2 fois par jour. Consultez un professionnel de santé pour la posologie adaptée à votre situation."
+    
     # Amoxicilline - specific questions (HIGHEST PRIORITY)
     if 'amoxicilline' in message_lower or 'amoxicillin' in message_lower:
         if any(word in message_lower for word in ['fonctionne', 'fonctionnement', 'comment', 'how', 'mécanisme', 'mechanism', 'action', 'works']):
@@ -705,12 +722,16 @@ with col1:
 if send_button and user_input.strip():
     user_message = user_input.strip()
     
-    # Prevent duplicate messages
+    # Prevent duplicate messages - check last 3 messages
     if st.session_state.messages:
-        last_msg = st.session_state.messages[-1]
-        if last_msg.get("role") == "user" and last_msg.get("content") == user_message:
-            st.warning("Vous avez déjà envoyé ce message.")
-            st.stop()
+        recent_messages = st.session_state.messages[-3:]
+        for msg in recent_messages:
+            if msg.get("role") == "user" and msg.get("content") == user_message:
+                st.warning("⚠️ Vous avez déjà envoyé ce message récemment.")
+                # Clear input but don't stop - allow user to continue
+                user_input = ""
+                st.rerun()
+                st.stop()
     
     # Add user message
     st.session_state.messages.append({
@@ -729,18 +750,32 @@ if send_button and user_input.strip():
             )
             
             if not reply or not reply.strip():
-                reply = "Désolé, je n'ai pas pu générer de réponse. Veuillez réessayer."
+                reply = "Désolé, je n'ai pas pu générer de réponse. Veuillez réessayer avec une question plus précise sur le domaine pharmaceutique."
         except Exception as e:
             st.error(f"Erreur: {str(e)}")
             reply = "Désolé, une erreur s'est produite. Veuillez réessayer."
     
-    # Add assistant reply
-    st.session_state.messages.append({
-        "role": "assistant",
-        "content": reply,
-        "timestamp": datetime.now().isoformat()
-    })
+    # Add assistant reply - check for duplicates
+    if st.session_state.messages:
+        last_msg = st.session_state.messages[-1]
+        if last_msg.get("role") == "assistant" and last_msg.get("content") == reply:
+            # Don't add duplicate reply
+            pass
+        else:
+            st.session_state.messages.append({
+                "role": "assistant",
+                "content": reply,
+                "timestamp": datetime.now().isoformat()
+            })
+    else:
+        st.session_state.messages.append({
+            "role": "assistant",
+            "content": reply,
+            "timestamp": datetime.now().isoformat()
+        })
     
+    # Clear input to prevent re-submission
+    st.session_state.user_input = ""
     st.rerun()
 
 # Footer
