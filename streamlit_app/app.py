@@ -96,10 +96,6 @@ def generate_with_openai_api(message: str, history: list, api_key: str):
 @st.cache_resource
 def load_model():
     """Load the AI model (cached for performance) - only if API not available"""
-    api_type, api_key = check_api_available()
-    if api_type:
-        return None, f"api-{api_type}"  # API will be used instead
-    
     model_name = "microsoft/DialoGPT-small"
     
     try:
@@ -114,17 +110,19 @@ def load_model():
         st.success("✅ Modèle chargé avec succès!")
         return pipeline_obj, model_name
     except Exception as e:
-        st.warning(f"⚠️ Erreur lors du chargement du modèle: {e}")
-        st.info("Tentative avec un modèle alternatif...")
+        st.warning(f"⚠️ Erreur lors du chargement du modèle {model_name}: {e}")
+        st.info("Tentative avec un modèle alternatif (GPT-2)...")
         try:
             pipeline_obj = pipeline(
                 "text-generation",
                 model="gpt2",
                 device=-1
             )
+            st.success("✅ Modèle GPT-2 chargé avec succès!")
             return pipeline_obj, "gpt2"
         except Exception as e2:
             st.error(f"❌ Impossible de charger un modèle: {e2}")
+            st.info("💡 **Recommandation :** Utilisez l'API OpenAI pour des réponses plus fiables (voir README_API.md)")
             return None, None
 
 
@@ -590,17 +588,39 @@ if "pipeline" not in st.session_state:
 if "model_name" not in st.session_state:
     st.session_state.model_name = None
 
-# Load model
-if not st.session_state.model_loaded:
-    with st.spinner("Chargement du modèle IA..."):
-        pipeline_obj, model_name = load_model()
-        if pipeline_obj:
-            st.session_state.pipeline = pipeline_obj
-            st.session_state.model_name = model_name
-            st.session_state.model_loaded = True
-        else:
-            st.error("Impossible de charger le modèle. Veuillez réessayer plus tard.")
-            st.stop()
+# Check API first, then load model if needed
+api_type, api_key = check_api_available()
+if api_type:
+    # API is available, no need to load local model
+    if not st.session_state.model_loaded:
+        st.session_state.pipeline = None  # API mode
+        st.session_state.model_name = f"api-{api_type}"
+        st.session_state.model_loaded = True
+        st.success(f"✅ API {api_type.upper()} configurée et prête!")
+else:
+    # No API, try to load local model
+    if not st.session_state.model_loaded:
+        with st.spinner("Chargement du modèle IA..."):
+            pipeline_obj, model_name = load_model()
+            if pipeline_obj or model_name:
+                st.session_state.pipeline = pipeline_obj
+                st.session_state.model_name = model_name
+                st.session_state.model_loaded = True
+            else:
+                st.error("❌ Impossible de charger le modèle local.")
+                st.info("💡 **Solution :** Configurez l'API OpenAI pour des réponses plus fiables.")
+                st.markdown("""
+                **Pour configurer l'API OpenAI :**
+                1. Obtenez une clé API sur https://platform.openai.com/api-keys
+                2. Configurez les variables d'environnement :
+                   - `USE_API=true`
+                   - `OPENAI_API_KEY=votre-cle-api`
+                   - `OPENAI_MODEL=gpt-3.5-turbo`
+                3. Redémarrez l'application
+                
+                Voir `streamlit_app/README_API.md` pour plus de détails.
+                """)
+                st.stop()
 
 # Main UI
 st.title("💊 Assistant Pharma/MedTech")
