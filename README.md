@@ -1,5 +1,7 @@
 # AI Chat Webapp - Assistant Pharma/MedTech
 
+**Auteur:** Nedim Mejri
+
 ## 🚀 Configuration Rapide avec API OpenAI (Recommandé)
 
 Pour des réponses plus fiables, configurez l'API OpenAI :
