@@ -2,6 +2,16 @@
 
 **Auteur:** Nedim Mejri
 
+## 📋 Description
+
+Application complète de chatbot intelligent spécialisé dans le domaine pharmaceutique et médical. Cette application offre une interface conversationnelle avancée permettant d'obtenir des réponses fiables et contextualisées sur des sujets pharma/MedTech.
+
+Le projet propose deux variantes de déploiement pour répondre à différents besoins :
+- **Architecture Full-stack** : Backend FastAPI avec API RESTful + Frontend React moderne et réactif
+- **Application Streamlit** : Solution standalone rapide à déployer et utiliser
+
+L'application peut fonctionner avec des modèles locaux (via Hugging Face) ou utiliser l'API OpenAI pour des performances optimales en production.
+
 ## 🚀 Configuration Rapide avec API OpenAI (Recommandé)
 
 Pour des réponses plus fiables, configurez l'API OpenAI :
@@ -30,12 +40,6 @@ Le système utilisera automatiquement l'API OpenAI si configurée, sinon il util
 📖 **Guide complet** : Voir `backend/README_API.md`
 
 ---
-
-# AI Chat Webapp
-
-Application complète de chatbot IA avec deux variantes de déploiement:
-1. **Full-stack**: Backend FastAPI + Frontend React
-2. **Streamlit-only**: Application Streamlit standalone
 
 ## 🚀 Démarrage rapide
 
