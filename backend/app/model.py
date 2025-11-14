@@ -361,18 +361,27 @@ class ChatModel:
             return ""
     
     def _is_pharma_question(self, message_lower: str) -> bool:
-        """Check if question is clearly pharmaceutique/medical - IMPROVED"""
+        """Check if question is clearly pharmaceutique/medical - ULTRA IMPROVED"""
+        # First check for known drug names (highest priority)
+        known_drugs = ['amoxicilline', 'amoxicillin', 'paracétamol', 'paracetamol', 'aspirine', 
+                      'aspirin', 'ibuprofène', 'ibuprofen', 'pénicilline', 'penicillin',
+                      'paracétamol', 'acetaminophen', 'tylenol']
+        has_drug_name = any(drug in message_lower for drug in known_drugs)
+        
+        # If contains drug name, it's definitely pharma
+        if has_drug_name:
+            return True
+        
+        # Check for pharma keywords
         pharma_keywords = [
-            # Medications - expanded
+            # Medications
             'médicament', 'medicament', 'drug', 'molecule', 'principe actif', 'posologie', 'dosage',
-            'antibiotique', 'antibiotic', 'amoxicilline', 'amoxicillin', 'paracétamol', 'paracetamol',
-            'aspirine', 'aspirin', 'ibuprofène', 'ibuprofen', 'pillule', 'comprimé', 'gélule',
+            'antibiotique', 'antibiotic', 'pillule', 'comprimé', 'gélule',
             'pénicilline', 'penicillin', 'céphalosporine', 'cephalosporin',
-            # Medical terms - expanded
+            # Medical terms
             'effet secondaire', 'side effect', 'effet indésirable', 'adverse', 'contre-indication',
             'indication', 'contraindication', 'interaction', 'pharmacocinétique', 'pharmacodynamie',
-            'posologie', 'dosage', 'administration', 'voie d\'administration', 'fonctionne', 'fonctionnement',
-            'mécanisme', 'mechanism', 'action', 'comment fonctionne', 'how does', 'how it works',
+            'fonctionne', 'fonctionnement', 'mécanisme', 'mechanism', 'action',
             # Medical devices
             'dispositif médical', 'dispositif medical', 'medical device', 'medtech',
             # Clinical
@@ -386,23 +395,24 @@ class ChatModel:
             # Biotech
             'biotechnologie', 'biotechnology', 'biotech', 'biologique', 'biologic',
             # General health/pharma
-            'santé', 'health', 'médical', 'medical', 'thérapeutique', 'therapeutic', 'thérapie',
-            # Common pharma question patterns
-            'comment', 'pourquoi', 'qu\'est', 'what is', 'how', 'why'
+            'santé', 'health', 'médical', 'medical', 'thérapeutique', 'therapeutic', 'thérapie'
         ]
-        # Check if contains pharma keyword OR if it's a question about a known drug
         has_keyword = any(keyword in message_lower for keyword in pharma_keywords)
         
-        # Also check for drug names even if no other keyword
-        known_drugs = ['amoxicilline', 'amoxicillin', 'paracétamol', 'paracetamol', 'aspirine', 
-                      'aspirin', 'ibuprofène', 'ibuprofen', 'pénicilline', 'penicillin']
-        has_drug_name = any(drug in message_lower for drug in known_drugs)
+        # If has pharma keyword, it's pharma
+        if has_keyword:
+            return True
         
-        # If it's a question (contains question words) about a drug, it's pharma
+        # Check for question patterns with medical context
         question_words = ['comment', 'pourquoi', 'quels', 'quelle', 'quel', 'qu\'est', 'what', 'how', 'why', 'which']
         is_question = any(qw in message_lower for qw in question_words)
         
-        return has_keyword or (has_drug_name and is_question)
+        # If it's a question and contains any medical/pharma context, it's pharma
+        medical_context = ['traitement', 'treatment', 'infection', 'bactérie', 'bacteria', 'virus', 
+                          'maladie', 'disease', 'symptôme', 'symptom', 'patient', 'malade']
+        has_medical_context = any(ctx in message_lower for ctx in medical_context)
+        
+        return is_question and has_medical_context
     
     def _get_domain_specific_response(self, message_lower: str) -> Optional[str]:
         """Get domain-specific response ONLY for greetings or very general questions"""

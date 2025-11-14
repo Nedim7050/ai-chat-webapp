@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react'
+import React, { useState, useRef, useEffect, useCallback } from 'react'
 import './App.css'
 
 // Use proxy in development, direct URL in production
@@ -11,6 +11,8 @@ function App() {
   const [error, setError] = useState(null)
   const [connectionStatus, setConnectionStatus] = useState('checking')
   const messagesEndRef = useRef(null)
+  const sendingRef = useRef(false) // Prevent multiple simultaneous sends
+  const messageIdsRef = useRef(new Set()) // Track message IDs to prevent duplicates
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -48,8 +50,14 @@ function App() {
     return () => clearInterval(interval)
   }, [])
 
-  const sendMessage = async () => {
-    if (!input.trim() || loading) {
+  // Generate unique ID for messages
+  const generateMessageId = () => {
+    return `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+  }
+
+  const sendMessage = useCallback(async () => {
+    // Prevent multiple simultaneous sends
+    if (sendingRef.current || !input.trim() || loading) {
       return
     }
 
@@ -58,23 +66,41 @@ function App() {
     // Check if this exact message was just sent (prevent duplicates)
     const lastUserMessage = messages.filter(m => m.role === 'user').slice(-1)[0]
     if (lastUserMessage && lastUserMessage.content === userMessage) {
-      // Don't send duplicate message
       return
     }
     
+    // Set sending flag
+    sendingRef.current = true
     setInput('')
     setError(null)
     setLoading(true)
 
-    // Add user message - use functional update to avoid stale closure
+    const userMessageId = generateMessageId()
+    const userMsg = { id: userMessageId, role: 'user', content: userMessage, timestamp: Date.now() }
+
+    // Add user message with deduplication
     setMessages(prev => {
-      // Double check: if last message is identical, don't add
-      const lastMsg = prev[prev.length - 1]
-      if (lastMsg && lastMsg.role === 'user' && lastMsg.content === userMessage) {
+      // Check for duplicates by content and role
+      const isDuplicate = prev.some(
+        msg => msg.role === 'user' && 
+               msg.content === userMessage && 
+               Date.now() - msg.timestamp < 5000 // Within 5 seconds
+      )
+      if (isDuplicate) {
+        sendingRef.current = false
         setLoading(false)
-        return prev // Don't add duplicate
+        return prev
       }
-      return [...prev, { role: 'user', content: userMessage }]
+      
+      // Check if message ID already exists
+      if (messageIdsRef.current.has(userMessageId)) {
+        sendingRef.current = false
+        setLoading(false)
+        return prev
+      }
+      
+      messageIdsRef.current.add(userMessageId)
+      return [...prev, userMsg]
     })
 
     try {
@@ -87,8 +113,7 @@ function App() {
           message: userMessage,
           history: messages.map(m => ({ role: m.role, content: m.content }))
         }),
-        // Add timeout
-        signal: AbortSignal.timeout(60000) // 60 seconds timeout
+        signal: AbortSignal.timeout(60000)
       })
 
       if (!response.ok) {
@@ -114,21 +139,39 @@ function App() {
         throw new Error('Réponse invalide du serveur')
       }
       
-      // Add assistant reply - use functional update and check for duplicates
+      const assistantMessageId = generateMessageId()
+      const assistantMsg = { 
+        id: assistantMessageId, 
+        role: 'assistant', 
+        content: data.reply, 
+        timestamp: Date.now() 
+      }
+
+      // Add assistant reply with strict deduplication
       setMessages(prev => {
-        // Check if this exact reply was just added (prevent duplicates)
-        const lastMessage = prev[prev.length - 1]
-        if (lastMessage && lastMessage.role === 'assistant' && lastMessage.content === data.reply) {
-          return prev // Don't add duplicate
+        // Check for duplicates by content
+        const isDuplicate = prev.some(
+          msg => msg.role === 'assistant' && 
+                 msg.content === data.reply && 
+                 Date.now() - msg.timestamp < 5000 // Within 5 seconds
+        )
+        if (isDuplicate) {
+          return prev
         }
-        // Also check if last 2 messages are identical (prevent rapid duplicates)
-        if (prev.length >= 2) {
-          const lastTwo = prev.slice(-2)
-          if (lastTwo[0].content === data.reply && lastTwo[1].content === data.reply) {
-            return prev // Don't add if last 2 are identical
-          }
+        
+        // Check if message ID already exists
+        if (messageIdsRef.current.has(assistantMessageId)) {
+          return prev
         }
-        return [...prev, { role: 'assistant', content: data.reply }]
+        
+        // Check if last message is identical
+        const lastMsg = prev[prev.length - 1]
+        if (lastMsg && lastMsg.role === 'assistant' && lastMsg.content === data.reply) {
+          return prev
+        }
+        
+        messageIdsRef.current.add(assistantMessageId)
+        return [...prev, assistantMsg]
       })
       setConnectionStatus('connected')
     } catch (err) {
@@ -143,13 +186,14 @@ function App() {
       console.error('Error sending message:', err)
     } finally {
       setLoading(false)
+      sendingRef.current = false
     }
-  }
+  }, [input, loading, messages])
 
   const handleKeyPress = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
-      if (!loading && input.trim()) {
+      if (!loading && input.trim() && !sendingRef.current) {
         sendMessage()
       }
     }
@@ -158,7 +202,7 @@ function App() {
   const handleKeyDown = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
-      if (!loading && input.trim()) {
+      if (!loading && input.trim() && !sendingRef.current) {
         sendMessage()
       }
     }
@@ -167,6 +211,7 @@ function App() {
   const clearChat = () => {
     setMessages([])
     setError(null)
+    messageIdsRef.current.clear()
   }
 
   return (
@@ -204,8 +249,8 @@ function App() {
             </div>
           )}
           
-          {messages.map((msg, idx) => (
-            <div key={idx} className={`message ${msg.role}`}>
+          {messages.map((msg) => (
+            <div key={msg.id} className={`message ${msg.role}`}>
               <div className="message-content">
                 {msg.content}
               </div>
@@ -233,13 +278,10 @@ function App() {
           className="input-container"
           onSubmit={(e) => {
             e.preventDefault()
-            // Prevent multiple rapid submissions
-            if (!loading && input.trim()) {
+            if (!loading && input.trim() && !sendingRef.current) {
               const userMessage = input.trim()
-              // Check if this is the same as last user message
               const lastUserMsg = messages.filter(m => m.role === 'user').slice(-1)[0]
               if (lastUserMsg && lastUserMsg.content === userMessage) {
-                // Don't send duplicate
                 return
               }
               sendMessage()
@@ -254,11 +296,11 @@ function App() {
             placeholder="Tapez votre message..."
             rows={1}
             className="message-input"
-            disabled={loading}
+            disabled={loading || sendingRef.current}
           />
           <button 
             type="submit"
-            disabled={loading || !input.trim()}
+            disabled={loading || !input.trim() || sendingRef.current}
             className="send-button"
           >
             {loading ? 'Envoi...' : 'Envoyer'}
@@ -270,4 +312,3 @@ function App() {
 }
 
 export default App
-
