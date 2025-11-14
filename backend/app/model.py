@@ -133,8 +133,8 @@ class ChatModel:
             
             message_lower = message.lower().strip()
             print(f"Processing message: {message_lower[:50]}...")
-        
-        # Check if this exact question was already asked (prevent repetition)
+            
+            # Check if this exact question was already asked (prevent repetition)
         # Only check the LAST message to avoid false positives
         if history:
             # Get the last user message
@@ -209,10 +209,10 @@ class ChatModel:
                 import traceback
                 traceback.print_exc()
         
-        # If all attempts failed, use intelligent domain-specific fallback
-        fallback_reply = self._generate_intelligent_fallback(message, is_pharma_question)
-        print(f"Using fallback reply: {fallback_reply[:100]}...")
-        return fallback_reply
+            # If all attempts failed, use intelligent domain-specific fallback
+            fallback_reply = self._generate_intelligent_fallback(message, is_pharma_question)
+            print(f"Using fallback reply: {fallback_reply[:100]}...")
+            return fallback_reply
         except Exception as e:
             print(f"CRITICAL ERROR in generate_reply: {str(e)}")
             import traceback
