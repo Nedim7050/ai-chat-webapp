@@ -134,6 +134,10 @@ function App() {
       const currentMessages = messages
       const history = currentMessages.map(m => ({ role: m.role, content: m.content }))
 
+      console.log('Sending request to:', `${API_URL}/chat`)
+      console.log('Message:', userMessage)
+      console.log('History length:', history.length)
+
       const response = await fetch(`${API_URL}/chat`, {
         method: 'POST',
         headers: {
@@ -145,6 +149,8 @@ function App() {
         }),
         signal: AbortSignal.timeout(60000)
       })
+
+      console.log('Response status:', response.status)
 
       if (!response.ok) {
         const errorText = await response.text()
@@ -164,10 +170,14 @@ function App() {
       }
 
       const data = await response.json()
+      console.log('Response data:', data)
       
       if (!data.reply) {
-        throw new Error('Réponse invalide du serveur')
+        console.error('ERROR: No reply in response:', data)
+        throw new Error('Réponse invalide du serveur: aucune réponse générée')
       }
+      
+      console.log('Reply received:', data.reply.substring(0, 100))
       
       const assistantMessageId = generateMessageId()
       const replyTimestamp = Date.now()

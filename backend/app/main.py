@@ -74,7 +74,10 @@ async def chat(request: ChatRequest):
     """
     Chat endpoint: accepts message and history, returns AI reply
     """
+    print(f"Received chat request: {request.message[:50]}...")
+    
     if not chat_model.is_loaded():
+        print("ERROR: Model not loaded!")
         raise HTTPException(
             status_code=503, 
             detail="Model not loaded yet. Please wait a few moments and try again."
@@ -85,13 +88,17 @@ async def chat(request: ChatRequest):
     
     try:
         # Get reply from model
+        print(f"Generating reply for: {request.message[:50]}...")
         reply = chat_model.generate_reply(
             message=request.message,
             history=request.history or []
         )
         
+        print(f"Generated reply: {reply[:100] if reply else 'EMPTY'}...")
+        
         if not reply or not reply.strip():
-            reply = "Désolé, je n'ai pas pu générer de réponse. Veuillez réessayer."
+            print("WARNING: Empty reply generated, using fallback")
+            reply = "Désolé, je n'ai pas pu générer de réponse. Veuillez réessayer avec une question plus précise sur le domaine pharmaceutique et de la santé."
         
         return ChatResponse(
             reply=reply,
@@ -103,12 +110,16 @@ async def chat(request: ChatRequest):
     except HTTPException:
         raise
     except Exception as e:
-        print(f"Error generating reply: {str(e)}")
+        print(f"ERROR generating reply: {str(e)}")
         import traceback
         traceback.print_exc()
-        raise HTTPException(
-            status_code=500, 
-            detail=f"Error generating reply: {str(e)}"
+        # Return a helpful error message instead of crashing
+        return ChatResponse(
+            reply=f"Désolé, une erreur s'est produite lors de la génération de la réponse. Erreur: {str(e)}. Veuillez réessayer avec une question sur le domaine pharmaceutique et de la santé.",
+            usage={
+                "model": chat_model.model_name if chat_model.model_name else "unknown",
+                "tokens": 0
+            }
         )
 
 

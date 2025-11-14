@@ -118,18 +118,21 @@ class ChatModel:
         Returns:
             Generated reply string
         """
-        if not self._loaded:
-            raise RuntimeError("Model not loaded")
-        
-        if history is None:
-            history = []
-        
-        # Clean and validate message
-        message = message.strip()
-        if not message:
-            return "Je n'ai pas compris votre message. Pouvez-vous reformuler votre question concernant le domaine pharmaceutique et de la santé (Pharma/MedTech)?"
-        
-        message_lower = message.lower().strip()
+        try:
+            if not self._loaded:
+                print("ERROR: Model not loaded in generate_reply")
+                raise RuntimeError("Model not loaded")
+            
+            if history is None:
+                history = []
+            
+            # Clean and validate message
+            message = message.strip()
+            if not message:
+                return "Je n'ai pas compris votre message. Pouvez-vous reformuler votre question concernant le domaine pharmaceutique et de la santé (Pharma/MedTech)?"
+            
+            message_lower = message.lower().strip()
+            print(f"Processing message: {message_lower[:50]}...")
         
         # Check if this exact question was already asked (prevent repetition)
         # Only check the LAST message to avoid false positives
@@ -207,7 +210,15 @@ class ChatModel:
                 traceback.print_exc()
         
         # If all attempts failed, use intelligent domain-specific fallback
-        return self._generate_intelligent_fallback(message, is_pharma_question)
+        fallback_reply = self._generate_intelligent_fallback(message, is_pharma_question)
+        print(f"Using fallback reply: {fallback_reply[:100]}...")
+        return fallback_reply
+        except Exception as e:
+            print(f"CRITICAL ERROR in generate_reply: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            # Always return a valid response, never crash
+            return f"Je suis désolé, une erreur technique s'est produite. Veuillez réessayer avec une question sur le domaine pharmaceutique et de la santé (Pharma/MedTech)."
     
     def _generate_with_model(self, message: str, history: List[Dict[str, str]]) -> str:
         """Generate reply using direct model inference with domain-specific context"""
