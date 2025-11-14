@@ -231,16 +231,32 @@ def generate_domain_fallback(message: str) -> str:
     return f"Je suis désolé, mais je suis spécialisé uniquement dans le domaine pharmaceutique et de la santé (Pharma/MedTech). Je ne peux répondre qu'aux questions concernant :\n• Les médicaments et principes actifs\n• Les dispositifs médicaux (MedTech)\n• Les essais cliniques et la recherche pharmaceutique\n• La réglementation (FDA, EMA, ANSM)\n• La pharmacovigilance et la sécurité des médicaments\n• La biotechnologie pharmaceutique\n• Les innovations en santé\n\nVotre question '{message}' ne semble pas être liée à ce domaine. Pourriez-vous reformuler votre question dans le contexte pharmaceutique et de la santé?"
 
 def is_pharma_question(message_lower: str) -> bool:
-    """Check if question is clearly pharmaceutique/medical"""
+    """Check if question is clearly pharmaceutique/medical - IMPROVED"""
+    # First check for known drug names (highest priority)
+    known_drugs = [
+        'amoxicilline', 'amoxicillin', 'paracétamol', 'paracetamol', 'aspirine', 
+        'aspirin', 'ibuprofène', 'ibuprofen', 'pénicilline', 'penicillin',
+        'famodine', 'famotidine', 'omeprazole', 'omeprazole',
+        'acetaminophen', 'tylenol', 'doliprane', 'dafalgan',
+        'diclofenac', 'voltaren', 'metformine', 'metformin', 'insuline', 'insulin',
+        'atorvastatine', 'atorvastatin', 'simvastatine', 'simvastatin',
+        'amlodipine', 'lisinopril', 'ramipril',
+        'levothyroxine', 'warfarine', 'warfarin', 'acenocoumarol'
+    ]
+    has_drug_name = any(drug in message_lower for drug in known_drugs)
+    
+    # If contains drug name, it's definitely pharma
+    if has_drug_name:
+        return True
+    
+    # Check for pharma keywords
     pharma_keywords = [
         'médicament', 'medicament', 'drug', 'molecule', 'principe actif', 'posologie', 'dosage',
-        'antibiotique', 'antibiotic', 'amoxicilline', 'amoxicillin', 'paracétamol', 'paracetamol',
-        'aspirine', 'aspirin', 'ibuprofène', 'ibuprofen', 'pillule', 'comprimé', 'gélule',
+        'antibiotique', 'antibiotic', 'pillule', 'comprimé', 'gélule', 'mg', 'milligramme',
         'pénicilline', 'penicillin', 'céphalosporine', 'cephalosporin',
         'effet secondaire', 'side effect', 'effet indésirable', 'adverse', 'contre-indication',
         'indication', 'contraindication', 'interaction', 'pharmacocinétique', 'pharmacodynamie',
-        'posologie', 'dosage', 'administration', 'voie d\'administration', 'fonctionne', 'fonctionnement',
-        'mécanisme', 'mechanism', 'action', 'comment fonctionne', 'how does', 'how it works',
+        'fonctionne', 'fonctionnement', 'mécanisme', 'mechanism', 'action',
         'dispositif médical', 'dispositif medical', 'medical device', 'medtech',
         'essai clinique', 'clinical trial', 'étude clinique', 'phase', 'rct',
         'réglementation', 'regulation', 'fda', 'ema', 'ansm', 'amm', 'autorisation',
@@ -248,15 +264,24 @@ def is_pharma_question(message_lower: str) -> bool:
         'pharmacovigilance', 'sécurité', 'safety', 'surveillance', 'toxicité',
         'biotechnologie', 'biotechnology', 'biotech', 'biologique', 'biologic',
         'santé', 'health', 'médical', 'medical', 'thérapeutique', 'therapeutic', 'thérapie',
-        'comment', 'pourquoi', 'qu\'est', 'what is', 'how', 'why'
+        'c\'est quoi', 'qu\'est', 'what is', 'what', 'quel', 'quelle'
     ]
     has_keyword = any(keyword in message_lower for keyword in pharma_keywords)
-    known_drugs = ['amoxicilline', 'amoxicillin', 'paracétamol', 'paracetamol', 'aspirine', 
-                  'aspirin', 'ibuprofène', 'ibuprofen', 'pénicilline', 'penicillin']
-    has_drug_name = any(drug in message_lower for drug in known_drugs)
-    question_words = ['comment', 'pourquoi', 'quels', 'quelle', 'quel', 'qu\'est', 'what', 'how', 'why', 'which']
+    
+    # If has pharma keyword, it's pharma
+    if has_keyword:
+        return True
+    
+    # Check for question patterns with medical context
+    question_words = ['comment', 'pourquoi', 'quels', 'quelle', 'quel', 'qu\'est', 'what', 'how', 'why', 'which', 'c\'est quoi']
     is_question = any(qw in message_lower for qw in question_words)
-    return has_keyword or (has_drug_name and is_question)
+    
+    # If it's a question and contains any medical/pharma context, it's pharma
+    medical_context = ['traitement', 'treatment', 'infection', 'bactérie', 'bacteria', 'virus', 
+                      'maladie', 'disease', 'symptôme', 'symptom', 'patient', 'malade']
+    has_medical_context = any(ctx in message_lower for ctx in medical_context)
+    
+    return is_question and has_medical_context
 
 def get_pharma_specific_answer(message_lower: str):
     """Get specific pre-defined answers for common pharma questions - EXPANDED"""
@@ -728,9 +753,9 @@ if send_button and user_input.strip():
         for msg in recent_messages:
             if msg.get("role") == "user" and msg.get("content") == user_message:
                 st.warning("⚠️ Vous avez déjà envoyé ce message récemment.")
-                # Clear input but don't stop - allow user to continue
-                user_input = ""
-                st.rerun()
+                # Clear input in session state
+                if "user_input" in st.session_state:
+                    st.session_state.user_input = ""
                 st.stop()
     
     # Add user message
