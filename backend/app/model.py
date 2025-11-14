@@ -135,80 +135,80 @@ class ChatModel:
             print(f"Processing message: {message_lower[:50]}...")
             
             # Check if this exact question was already asked (prevent repetition)
-        # Only check the LAST message to avoid false positives
-        if history:
-            # Get the last user message
-            last_user_messages = [msg.get("content", "").lower().strip() for msg in history[-3:] if msg.get("role") == "user"]
-            if message_lower in last_user_messages:
-                # Same question asked in last 3 messages - check if we already answered
-                last_assistant_messages = [msg.get("content", "").strip() for msg in history[-3:] if msg.get("role") == "assistant"]
-                # If we already gave a "déjà posé" response, don't repeat it
-                if any("déjà posé" in msg.lower() or "déjà répondu" in msg.lower() for msg in last_assistant_messages):
-                    # Return a different message or just acknowledge silently
-                    return "Je comprends que vous souhaitez répéter votre question. Pourriez-vous poser une question différente ou plus précise?"
-                # First time we detect repetition
-                return "Vous avez déjà posé cette question. Pourriez-vous reformuler ou préciser votre demande?"
-        
-        # Check if message is clearly pharmaceutique - if yes, try model generation first
-        is_pharma_question = self._is_pharma_question(message_lower)
-        
-        # Only use generic domain response for greetings or very general questions
-        # For specific pharma questions, let the model try to answer
-        if not is_pharma_question:
-            domain_reply = self._get_domain_specific_response(message_lower)
-            if domain_reply:
-                return domain_reply
-        
-        # For pharma questions, ALWAYS use pre-defined answers first (most reliable)
-        # Skip model generation for pharma questions to avoid incoherent responses
-        if is_pharma_question:
-            specific_answer = self._get_pharma_specific_answer(message_lower)
-            if specific_answer:
-                # Check if we already gave this exact answer recently
-                if history:
-                    recent_assistant_messages = [msg.get("content", "").strip() for msg in history[-5:] if msg.get("role") == "assistant"]
-                    if specific_answer in recent_assistant_messages:
-                        # Already gave this answer - provide a variation
-                        return "J'ai déjà répondu à cette question précédemment. Pourriez-vous poser une question différente ou plus précise sur le même sujet?"
-                return specific_answer
+            # Only check the LAST message to avoid false positives
+            if history:
+                # Get the last user message
+                last_user_messages = [msg.get("content", "").lower().strip() for msg in history[-3:] if msg.get("role") == "user"]
+                if message_lower in last_user_messages:
+                    # Same question asked in last 3 messages - check if we already answered
+                    last_assistant_messages = [msg.get("content", "").strip() for msg in history[-3:] if msg.get("role") == "assistant"]
+                    # If we already gave a "déjà posé" response, don't repeat it
+                    if any("déjà posé" in msg.lower() or "déjà répondu" in msg.lower() for msg in last_assistant_messages):
+                        # Return a different message or just acknowledge silently
+                        return "Je comprends que vous souhaitez répéter votre question. Pourriez-vous poser une question différente ou plus précise?"
+                    # First time we detect repetition
+                    return "Vous avez déjà posé cette question. Pourriez-vous reformuler ou préciser votre demande?"
             
-            # If no specific answer but it's pharma, use intelligent fallback directly
-            return self._generate_intelligent_fallback(message, is_pharma_question)
-        
-        # For non-pharma questions, try model generation (but be very strict)
-        # Only if no domain-specific response found
-        if self.model is not None and self.tokenizer is not None:
-            try:
-                reply = self._generate_with_model(message, history)
-                # VERY STRICT validation - reject if not perfect
-                if reply and isinstance(reply, str) and reply.strip():
-                    # Must pass all validations
-                    if (self._is_valid_response(reply) and 
-                        not self._is_repetitive(reply) and
-                        not self._is_incoherent(reply) and
-                        self._is_domain_related(reply)):
-                        return reply
-            except Exception as e:
-                print(f"Error in _generate_with_model: {str(e)}")
-                import traceback
-                traceback.print_exc()
-        
-        # If direct model failed or not available, try pipeline (but be strict)
-        if self.pipeline is not None:
-            try:
-                reply = self._generate_with_pipeline(message, history)
-                # VERY STRICT validation
-                if reply and isinstance(reply, str) and reply.strip():
-                    if (self._is_valid_response(reply) and 
-                        not self._is_repetitive(reply) and
-                        not self._is_incoherent(reply) and
-                        self._is_domain_related(reply)):
-                        return reply
-            except Exception as e:
-                print(f"Error in _generate_with_pipeline: {str(e)}")
-                import traceback
-                traceback.print_exc()
-        
+            # Check if message is clearly pharmaceutique - if yes, try model generation first
+            is_pharma_question = self._is_pharma_question(message_lower)
+            
+            # Only use generic domain response for greetings or very general questions
+            # For specific pharma questions, let the model try to answer
+            if not is_pharma_question:
+                domain_reply = self._get_domain_specific_response(message_lower)
+                if domain_reply:
+                    return domain_reply
+            
+            # For pharma questions, ALWAYS use pre-defined answers first (most reliable)
+            # Skip model generation for pharma questions to avoid incoherent responses
+            if is_pharma_question:
+                specific_answer = self._get_pharma_specific_answer(message_lower)
+                if specific_answer:
+                    # Check if we already gave this exact answer recently
+                    if history:
+                        recent_assistant_messages = [msg.get("content", "").strip() for msg in history[-5:] if msg.get("role") == "assistant"]
+                        if specific_answer in recent_assistant_messages:
+                            # Already gave this answer - provide a variation
+                            return "J'ai déjà répondu à cette question précédemment. Pourriez-vous poser une question différente ou plus précise sur le même sujet?"
+                    return specific_answer
+                
+                # If no specific answer but it's pharma, use intelligent fallback directly
+                return self._generate_intelligent_fallback(message, is_pharma_question)
+            
+            # For non-pharma questions, try model generation (but be very strict)
+            # Only if no domain-specific response found
+            if self.model is not None and self.tokenizer is not None:
+                try:
+                    reply = self._generate_with_model(message, history)
+                    # VERY STRICT validation - reject if not perfect
+                    if reply and isinstance(reply, str) and reply.strip():
+                        # Must pass all validations
+                        if (self._is_valid_response(reply) and 
+                            not self._is_repetitive(reply) and
+                            not self._is_incoherent(reply) and
+                            self._is_domain_related(reply)):
+                            return reply
+                except Exception as e:
+                    print(f"Error in _generate_with_model: {str(e)}")
+                    import traceback
+                    traceback.print_exc()
+            
+            # If direct model failed or not available, try pipeline (but be strict)
+            if self.pipeline is not None:
+                try:
+                    reply = self._generate_with_pipeline(message, history)
+                    # VERY STRICT validation
+                    if reply and isinstance(reply, str) and reply.strip():
+                        if (self._is_valid_response(reply) and 
+                            not self._is_repetitive(reply) and
+                            not self._is_incoherent(reply) and
+                            self._is_domain_related(reply)):
+                            return reply
+                except Exception as e:
+                    print(f"Error in _generate_with_pipeline: {str(e)}")
+                    import traceback
+                    traceback.print_exc()
+            
             # If all attempts failed, use intelligent domain-specific fallback
             fallback_reply = self._generate_intelligent_fallback(message, is_pharma_question)
             print(f"Using fallback reply: {fallback_reply[:100]}...")
