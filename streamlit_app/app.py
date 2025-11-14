@@ -285,7 +285,26 @@ def is_pharma_question(message_lower: str) -> bool:
     return is_question and has_medical_context
 
 def get_pharma_specific_answer(message_lower: str):
-    """Get specific pre-defined answers for common pharma questions - EXPANDED"""
+    """Get specific pre-defined answers for common pharma questions - USING DATABASE"""
+    # Check database first for any drug
+    for drug_key in PHARMA_DATABASE.keys():
+        if drug_key in message_lower:
+            # Determine question type
+            if any(word in message_lower for word in ['fonctionne', 'fonctionnement', 'comment', 'how', 'mécanisme', 'mechanism', 'action', 'works']):
+                return generate_drug_response(drug_key, "mechanism")
+            elif any(word in message_lower for word in ['effet', 'side effect', 'indésirable', 'adverse', 'secondaire']):
+                return generate_drug_response(drug_key, "side_effects")
+            elif any(word in message_lower for word in ['posologie', 'dosage', 'dose', 'prendre', 'utiliser', 'take']):
+                return generate_drug_response(drug_key, "posology")
+            elif any(word in message_lower for word in ['indication', 'utilisé', 'used', 'traitement', 'treatment', 'pour', 'for']):
+                return generate_drug_response(drug_key, "indications")
+            elif any(word in message_lower for word in ['c\'est quoi', 'qu\'est', 'what is', 'what', 'quel', 'quelle']):
+                return generate_drug_response(drug_key, "general")
+            else:
+                # Default to general
+                return generate_drug_response(drug_key, "general")
+    
+    # Legacy code for specific drugs (if not in database)
     # Famotidine/Famodine - specific questions
     if 'famodine' in message_lower or 'famotidine' in message_lower:
         if any(word in message_lower for word in ['c\'est quoi', 'qu\'est', 'what is', 'what', 'quel', 'quelle']):
