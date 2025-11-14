@@ -1,3 +1,34 @@
+# AI Chat Webapp - Assistant Pharma/MedTech
+
+## 🚀 Configuration Rapide avec API OpenAI (Recommandé)
+
+Pour des réponses plus fiables, configurez l'API OpenAI :
+
+1. **Installer les dépendances API** :
+```bash
+cd backend
+pip install openai requests
+```
+
+2. **Configurer la clé API** (PowerShell) :
+```powershell
+$env:USE_API="true"
+$env:OPENAI_API_KEY="votre-cle-api-ici"
+$env:OPENAI_MODEL="gpt-3.5-turbo"
+$env:API_TYPE="openai"
+```
+
+3. **Démarrer le backend** :
+```powershell
+uvicorn app.main:app --reload --port 8000
+```
+
+Le système utilisera automatiquement l'API OpenAI si configurée, sinon il utilisera le modèle local.
+
+📖 **Guide complet** : Voir `backend/README_API.md`
+
+---
+
 # AI Chat Webapp
 
 Application complète de chatbot IA avec deux variantes de déploiement:
