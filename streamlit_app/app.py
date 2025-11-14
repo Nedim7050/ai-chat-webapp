@@ -8,6 +8,7 @@ import torch
 from datetime import datetime
 import json
 import os
+from pharma_database import get_drug_info, generate_drug_response, PHARMA_DATABASE
 
 # Page configuration
 st.set_page_config(
@@ -383,8 +384,7 @@ def generate_reply(pipeline_obj, message, history):
             if domain_reply:
                 return domain_reply
         
-        # For pharma questions, ALWAYS use pre-defined answers first (most reliable)
-        # Skip model generation for pharma questions to avoid incoherent responses
+        # For pharma questions, ALWAYS use database/pre-defined answers first (most reliable)
         if is_pharma:
             specific_answer = get_pharma_specific_answer(message_lower)
             if specific_answer:
@@ -395,8 +395,13 @@ def generate_reply(pipeline_obj, message, history):
                         return "J'ai déjà répondu à cette question précédemment. Pourriez-vous poser une question différente ou plus précise sur le même sujet?"
                 return specific_answer
             
-            # If no specific answer but it's pharma, use intelligent fallback directly
-            return generate_domain_fallback(message)
+            # If no specific answer but it's pharma, try to generate intelligent response
+            # Check if it's a general pharma question that we can answer
+            if any(word in message_lower for word in ['médicament', 'medicament', 'drug', 'pharmaceutique']):
+                return generate_domain_fallback(message)
+            
+            # For specific drug questions not in database, try to provide helpful response
+            return f"Je comprends que vous posez une question sur un médicament ou un produit pharmaceutique. Malheureusement, je n'ai pas d'informations détaillées sur ce médicament spécifique dans ma base de données actuelle.\n\nPour obtenir des informations précises sur ce médicament, je vous recommande de :\n• Consulter la notice du médicament\n• Contacter un pharmacien ou un professionnel de santé\n• Consulter les bases de données pharmaceutiques officielles (ANSM, EMA, FDA)\n\nPouvez-vous reformuler votre question de manière plus générale sur le domaine pharmaceutique?"
         
         # If no pipeline (API mode), use fallback
         if pipeline_obj is None:
@@ -753,9 +758,6 @@ if send_button and user_input.strip():
         for msg in recent_messages:
             if msg.get("role") == "user" and msg.get("content") == user_message:
                 st.warning("⚠️ Vous avez déjà envoyé ce message récemment.")
-                # Clear input in session state
-                if "user_input" in st.session_state:
-                    st.session_state.user_input = ""
                 st.stop()
     
     # Add user message
@@ -799,8 +801,7 @@ if send_button and user_input.strip():
             "timestamp": datetime.now().isoformat()
         })
     
-    # Clear input to prevent re-submission
-    st.session_state.user_input = ""
+    # Rerun to refresh UI (input will be cleared by Streamlit)
     st.rerun()
 
 # Footer
