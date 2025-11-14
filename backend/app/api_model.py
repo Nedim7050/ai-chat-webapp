@@ -67,12 +67,18 @@ Tu dois TOUJOURS répondre en français et être précis et professionnel."""
     
     def _generate_with_openai(self, message: str, history: List[Dict[str, str]]) -> str:
         """Generate reply using OpenAI API"""
-        import openai
-        
         if not self.openai_api_key:
             raise ValueError("OPENAI_API_KEY not configured")
         
-        openai.api_key = self.openai_api_key
+        # Try new OpenAI client (v1.0+)
+        try:
+            from openai import OpenAI
+            use_new_api = True
+        except ImportError:
+            # Fallback for older openai versions
+            import openai
+            openai.api_key = self.openai_api_key
+            use_new_api = False
         
         # Build messages for OpenAI
         messages = [
