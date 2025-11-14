@@ -292,7 +292,7 @@ def is_pharma_question(message_lower: str) -> bool:
 def get_pharma_specific_answer(message_lower: str):
     """Get specific pre-defined answers for common pharma questions - USING DATABASE"""
     # Check database first for any drug
-    for drug_key in PHARMA_DATABASE.keys():
+    for drug_key in MEDICATIONS_DATABASE.keys():
         if drug_key in message_lower:
             # Determine question type
             if any(word in message_lower for word in ['fonctionne', 'fonctionnement', 'comment', 'how', 'mécanisme', 'mechanism', 'action', 'works']):

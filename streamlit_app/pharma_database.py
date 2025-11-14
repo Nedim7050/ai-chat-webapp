@@ -453,6 +453,12 @@ def get_drug_info(drug_name_lower: str):
         if key in drug_name_lower or drug_name_lower in key:
             return info
     
+    # Recherche dans le nom du médicament
+    for key, info in MEDICATIONS_DATABASE.items():
+        drug_name = info.get('name', '').lower()
+        if drug_name and (drug_name in drug_name_lower or any(word in drug_name_lower for word in drug_name.split())):
+            return info
+    
     return None
 
 def generate_drug_response(drug_name_lower: str, question_type: str = "general"):
