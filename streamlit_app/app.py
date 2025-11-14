@@ -7,6 +7,7 @@ from transformers import AutoTokenizer, AutoModelForCausalLM, pipeline
 import torch
 from datetime import datetime
 import json
+import os
 
 # Page configuration
 st.set_page_config(
@@ -47,9 +48,58 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 
+def check_api_available():
+    """Check if API is configured"""
+    openai_key = os.getenv("OPENAI_API_KEY", "")
+    gemini_key = os.getenv("GEMINI_API_KEY", "")
+    use_api = os.getenv("USE_API", "false").lower() == "true"
+    
+    if use_api and openai_key:
+        return "openai", openai_key
+    elif use_api and gemini_key:
+        return "gemini", gemini_key
+    return None, None
+
+def generate_with_openai_api(message: str, history: list, api_key: str):
+    """Generate reply using OpenAI API"""
+    try:
+        from openai import OpenAI
+        
+        client = OpenAI(api_key=api_key)
+        model_name = os.getenv("OPENAI_MODEL", "gpt-3.5-turbo")
+        
+        system_context = "Tu es un assistant spécialisé dans le domaine pharmaceutique et de la santé (Pharma/MedTech). Tu aides les utilisateurs avec des questions sur les médicaments, les dispositifs médicaux, la recherche pharmaceutique, la réglementation, les essais cliniques, et les innovations en santé. Tu dois TOUJOURS répondre en français."
+        
+        messages = [{"role": "system", "content": system_context}]
+        
+        # Add history (last 10 messages)
+        for msg in history[-10:]:
+            role = msg.get("role", "user")
+            content = msg.get("content", "")
+            if role in ["user", "assistant"] and content:
+                messages.append({"role": role, "content": content})
+        
+        messages.append({"role": "user", "content": message})
+        
+        response = client.chat.completions.create(
+            model=model_name,
+            messages=messages,
+            temperature=0.7,
+            max_tokens=500
+        )
+        
+        return response.choices[0].message.content.strip()
+    except Exception as e:
+        st.error(f"Erreur API OpenAI: {str(e)}")
+        return None
+
 @st.cache_resource
 def load_model():
-    """Load the AI model (cached for performance)"""
+    """Load the AI model (cached for performance) - only if API not available"""
+    api_type, api_key = check_api_available()
+    if api_type:
+        return None, f"api-{api_type}"  # API will be used instead
+    
     model_name = "microsoft/DialoGPT-small"
     
     try:
@@ -263,8 +313,13 @@ def is_incoherent(text: str) -> bool:
 def generate_reply(pipeline_obj, message, history):
     """Generate a reply using the model with domain-specific validation"""
     try:
-        from transformers import Conversation
-        import torch
+        # Check if API is available
+        api_type, api_key = check_api_available()
+        if api_type == "openai" and api_key:
+            reply = generate_with_openai_api(message, history, api_key)
+            if reply:
+                return reply
+            # Fall through to local model if API fails
         
         # Clean message
         message = message.strip()
@@ -301,6 +356,10 @@ def generate_reply(pipeline_obj, message, history):
                 return specific_answer
             
             # If no specific answer but it's pharma, use intelligent fallback directly
+            return generate_domain_fallback(message)
+        
+        # If no pipeline (API mode), use fallback
+        if pipeline_obj is None:
             return generate_domain_fallback(message)
         
         # For non-pharma questions, try generation with validation (max 2 attempts)
@@ -376,7 +435,7 @@ def generate_reply(pipeline_obj, message, history):
         print(f"Error in generate_reply: {e}")
         import traceback
         traceback.print_exc()
-        return _generate_fallback(message)
+        return generate_domain_fallback(message)
 
 def _is_repetitive(text: str) -> bool:
     """Check if text is repetitive"""
@@ -624,20 +683,36 @@ with col1:
     send_button = st.button("📤 Envoyer", use_container_width=True, type="primary")
 
 if send_button and user_input.strip():
+    user_message = user_input.strip()
+    
+    # Prevent duplicate messages
+    if st.session_state.messages:
+        last_msg = st.session_state.messages[-1]
+        if last_msg.get("role") == "user" and last_msg.get("content") == user_message:
+            st.warning("Vous avez déjà envoyé ce message.")
+            st.stop()
+    
     # Add user message
     st.session_state.messages.append({
         "role": "user",
-        "content": user_input.strip(),
+        "content": user_message,
         "timestamp": datetime.now().isoformat()
     })
     
     # Generate reply
     with st.spinner("🤔 Réflexion en cours..."):
-        reply = generate_reply(
-            st.session_state.pipeline,
-            user_input.strip(),
-            st.session_state.messages[:-1]  # Exclude the just-added user message
-        )
+        try:
+            reply = generate_reply(
+                st.session_state.pipeline,
+                user_message,
+                st.session_state.messages[:-1]  # Exclude the just-added user message
+            )
+            
+            if not reply or not reply.strip():
+                reply = "Désolé, je n'ai pas pu générer de réponse. Veuillez réessayer."
+        except Exception as e:
+            st.error(f"Erreur: {str(e)}")
+            reply = "Désolé, une erreur s'est produite. Veuillez réessayer."
     
     # Add assistant reply
     st.session_state.messages.append({
