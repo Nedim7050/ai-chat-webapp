@@ -90,8 +90,8 @@ Tu dois TOUJOURS répondre en français et être précis et professionnel."""
         messages.append({"role": "user", "content": message})
         
         try:
-            # Try new OpenAI client (v1.0+)
-            try:
+            if use_new_api:
+                # New OpenAI client (v1.0+)
                 client = OpenAI(api_key=self.openai_api_key)
                 response = client.chat.completions.create(
                     model=self.model_name,
@@ -101,8 +101,8 @@ Tu dois TOUJOURS répondre en français et être précis et professionnel."""
                     top_p=0.9
                 )
                 reply = response.choices[0].message.content.strip()
-            except NameError:
-                # Fallback to old API
+            else:
+                # Old OpenAI API
                 response = openai.ChatCompletion.create(
                     model=self.model_name,
                     messages=messages,
