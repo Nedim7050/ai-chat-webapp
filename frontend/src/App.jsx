@@ -11,8 +11,9 @@ function App() {
   const [error, setError] = useState(null)
   const [connectionStatus, setConnectionStatus] = useState('checking')
   const messagesEndRef = useRef(null)
-  const sendingRef = useRef(false) // Prevent multiple simultaneous sends
-  const messageIdsRef = useRef(new Set()) // Track message IDs to prevent duplicates
+  const sendingRef = useRef(false)
+  const pendingMessagesRef = useRef(new Set()) // Track pending message IDs
+  const lastMessageRef = useRef({ role: null, content: null, timestamp: 0 }) // Track last message
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -45,65 +46,94 @@ function App() {
     }
     
     checkConnection()
-    // Check every 10 seconds
     const interval = setInterval(checkConnection, 10000)
     return () => clearInterval(interval)
   }, [])
 
   // Generate unique ID for messages
-  const generateMessageId = () => {
+  const generateMessageId = useCallback(() => {
     return `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
-  }
+  }, [])
+
+  // Strict deduplication check
+  const isDuplicateMessage = useCallback((role, content) => {
+    const now = Date.now()
+    // Check if same as last message within 2 seconds
+    if (lastMessageRef.current.role === role && 
+        lastMessageRef.current.content === content &&
+        now - lastMessageRef.current.timestamp < 2000) {
+      return true
+    }
+    return false
+  }, [])
 
   const sendMessage = useCallback(async () => {
-    // Prevent multiple simultaneous sends
-    if (sendingRef.current || !input.trim() || loading) {
+    // Multiple guards against duplicate sends
+    if (sendingRef.current || loading || !input.trim()) {
       return
     }
 
     const userMessage = input.trim()
+    const now = Date.now()
     
-    // Check if this exact message was just sent (prevent duplicates)
-    const lastUserMessage = messages.filter(m => m.role === 'user').slice(-1)[0]
-    if (lastUserMessage && lastUserMessage.content === userMessage) {
+    // Check if this is a duplicate of the last user message
+    if (isDuplicateMessage('user', userMessage)) {
+      console.log('Duplicate user message blocked')
       return
     }
     
-    // Set sending flag
+    // Check against last message in state
+    setMessages(currentMessages => {
+      const lastMsg = currentMessages[currentMessages.length - 1]
+      if (lastMsg && lastMsg.role === 'user' && lastMsg.content === userMessage) {
+        console.log('Duplicate user message in state blocked')
+        return currentMessages
+      }
+      return currentMessages
+    })
+
+    // Set sending flag IMMEDIATELY
     sendingRef.current = true
+    const userMessageId = generateMessageId()
+    
+    // Check if this ID is already pending
+    if (pendingMessagesRef.current.has(userMessageId)) {
+      sendingRef.current = false
+      return
+    }
+    pendingMessagesRef.current.add(userMessageId)
+
     setInput('')
     setError(null)
     setLoading(true)
 
-    const userMessageId = generateMessageId()
-    const userMsg = { id: userMessageId, role: 'user', content: userMessage, timestamp: Date.now() }
+    // Update last message ref
+    lastMessageRef.current = { role: 'user', content: userMessage, timestamp: now }
 
-    // Add user message with deduplication
+    // Add user message with strict deduplication
     setMessages(prev => {
-      // Check for duplicates by content and role
-      const isDuplicate = prev.some(
-        msg => msg.role === 'user' && 
-               msg.content === userMessage && 
-               Date.now() - msg.timestamp < 5000 // Within 5 seconds
-      )
-      if (isDuplicate) {
+      // Final check: ensure no duplicate
+      const lastMsg = prev[prev.length - 1]
+      if (lastMsg && lastMsg.role === 'user' && lastMsg.content === userMessage) {
+        pendingMessagesRef.current.delete(userMessageId)
         sendingRef.current = false
         setLoading(false)
         return prev
       }
       
-      // Check if message ID already exists
-      if (messageIdsRef.current.has(userMessageId)) {
-        sendingRef.current = false
-        setLoading(false)
-        return prev
-      }
-      
-      messageIdsRef.current.add(userMessageId)
-      return [...prev, userMsg]
+      return [...prev, { 
+        id: userMessageId, 
+        role: 'user', 
+        content: userMessage, 
+        timestamp: now 
+      }]
     })
 
     try {
+      // Get current messages for history (use functional update to get latest)
+      const currentMessages = messages
+      const history = currentMessages.map(m => ({ role: m.role, content: m.content }))
+
       const response = await fetch(`${API_URL}/chat`, {
         method: 'POST',
         headers: {
@@ -111,7 +141,7 @@ function App() {
         },
         body: JSON.stringify({
           message: userMessage,
-          history: messages.map(m => ({ role: m.role, content: m.content }))
+          history: history
         }),
         signal: AbortSignal.timeout(60000)
       })
@@ -140,41 +170,52 @@ function App() {
       }
       
       const assistantMessageId = generateMessageId()
-      const assistantMsg = { 
-        id: assistantMessageId, 
-        role: 'assistant', 
-        content: data.reply, 
-        timestamp: Date.now() 
+      const replyTimestamp = Date.now()
+
+      // Check if this reply is a duplicate
+      if (isDuplicateMessage('assistant', data.reply)) {
+        console.log('Duplicate assistant message blocked')
+        pendingMessagesRef.current.delete(userMessageId)
+        sendingRef.current = false
+        setLoading(false)
+        return
       }
 
-      // Add assistant reply with strict deduplication
+      // Update last message ref
+      lastMessageRef.current = { role: 'assistant', content: data.reply, timestamp: replyTimestamp }
+
+      // Add assistant reply with STRICT deduplication
       setMessages(prev => {
-        // Check for duplicates by content
-        const isDuplicate = prev.some(
-          msg => msg.role === 'assistant' && 
-                 msg.content === data.reply && 
-                 Date.now() - msg.timestamp < 5000 // Within 5 seconds
-        )
-        if (isDuplicate) {
-          return prev
-        }
-        
-        // Check if message ID already exists
-        if (messageIdsRef.current.has(assistantMessageId)) {
-          return prev
-        }
-        
         // Check if last message is identical
         const lastMsg = prev[prev.length - 1]
         if (lastMsg && lastMsg.role === 'assistant' && lastMsg.content === data.reply) {
+          console.log('Duplicate assistant message in state blocked')
+          pendingMessagesRef.current.delete(userMessageId)
           return prev
         }
         
-        messageIdsRef.current.add(assistantMessageId)
-        return [...prev, assistantMsg]
+        // Check if any recent message is identical (within last 3 messages)
+        const recentMessages = prev.slice(-3)
+        const hasDuplicate = recentMessages.some(
+          msg => msg.role === 'assistant' && msg.content === data.reply
+        )
+        if (hasDuplicate) {
+          console.log('Duplicate assistant message in recent messages blocked')
+          pendingMessagesRef.current.delete(userMessageId)
+          return prev
+        }
+        
+        pendingMessagesRef.current.delete(userMessageId)
+        return [...prev, { 
+          id: assistantMessageId, 
+          role: 'assistant', 
+          content: data.reply, 
+          timestamp: replyTimestamp 
+        }]
       })
       setConnectionStatus('connected')
     } catch (err) {
+      pendingMessagesRef.current.delete(userMessageId)
       if (err.name === 'AbortError') {
         setError('Timeout: La requête a pris trop de temps. Le modèle est peut-être en train de se charger.')
       } else if (err.name === 'TypeError' && err.message.includes('fetch')) {
@@ -188,7 +229,7 @@ function App() {
       setLoading(false)
       sendingRef.current = false
     }
-  }, [input, loading, messages])
+  }, [input, loading, messages, generateMessageId, isDuplicateMessage])
 
   const handleKeyPress = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -211,7 +252,8 @@ function App() {
   const clearChat = () => {
     setMessages([])
     setError(null)
-    messageIdsRef.current.clear()
+    pendingMessagesRef.current.clear()
+    lastMessageRef.current = { role: null, content: null, timestamp: 0 }
   }
 
   return (
@@ -280,8 +322,8 @@ function App() {
             e.preventDefault()
             if (!loading && input.trim() && !sendingRef.current) {
               const userMessage = input.trim()
-              const lastUserMsg = messages.filter(m => m.role === 'user').slice(-1)[0]
-              if (lastUserMsg && lastUserMsg.content === userMessage) {
+              // Final check before sending
+              if (isDuplicateMessage('user', userMessage)) {
                 return
               }
               sendMessage()
