@@ -15,6 +15,7 @@ from pharma_database import (
     PHARMACOVIGILANCE_DATABASE, BIOTECH_DATABASE
 )
 from intelligent_responses import generate_intelligent_pharma_response
+from smart_responder import generate_smart_response
 
 # Page configuration
 st.set_page_config(
@@ -435,15 +436,22 @@ def generate_reply(pipeline_obj, message, history):
                             return "J'ai déjà répondu à cette question précédemment. Pourriez-vous poser une question différente ou plus précise?"
                     return domain_response
             
-            # If no database match but it's pharma, generate intelligent response
-            intelligent_response = generate_intelligent_pharma_response(message_lower, message)
-            if intelligent_response:
-                # Check for duplicates
-                if history:
-                    recent_assistant_messages = [msg.get("content", "").strip() for msg in history[-5:] if msg.get("role") == "assistant"]
-                    if intelligent_response in recent_assistant_messages:
-                        return "J'ai déjà répondu à cette question précédemment. Pourriez-vous poser une question différente ou plus précise ?"
-                return intelligent_response
+            # If no database match but it's pharma, generate intelligent response using smart responder
+            try:
+                smart_response = generate_smart_response(message, history)
+                if smart_response:
+                    # Check for duplicates
+                    if history:
+                        recent_assistant_messages = [msg.get("content", "").strip() for msg in history[-5:] if msg.get("role") == "assistant"]
+                        if smart_response in recent_assistant_messages:
+                            return "J'ai déjà répondu à cette question précédemment. Pourriez-vous poser une question différente ou plus précise ?"
+                    return smart_response
+            except Exception as e:
+                print(f"Error in smart responder: {e}")
+                # Fallback to intelligent responses
+                intelligent_response = generate_intelligent_pharma_response(message_lower, message)
+                if intelligent_response:
+                    return intelligent_response
             
             # Final fallback
             return generate_domain_fallback(message)
