@@ -152,13 +152,24 @@ class SmartPharmaResponder:
         return None
     
     def detect_question_type(self, message: str) -> str:
-        """Détecte le type de question"""
+        """Détecte le type de question - AMÉLIORÉ"""
         message_lower = message.lower()
         
-        for q_type, patterns in self.question_patterns.items():
-            for pattern in patterns:
-                if re.search(pattern, message_lower, re.IGNORECASE):
-                    return q_type
+        # Prioriser les types de questions les plus spécifiques
+        priority_order = ['interactions', 'comparison', 'side_effects', 'dosage', 
+                         'indications', 'mechanism', 'safety', 'general']
+        
+        for q_type in priority_order:
+            if q_type in self.question_patterns:
+                for pattern in self.question_patterns[q_type]:
+                    if re.search(pattern, message_lower, re.IGNORECASE):
+                        return q_type
+        
+        # Détection supplémentaire basée sur les mots-clés
+        if any(word in message_lower for word in ['explique', 'explain', 'détaille', 'détailler']):
+            return 'general'
+        if any(word in message_lower for word in ['encore', 'plus', 'détails', 'details', 'complément']):
+            return 'general'  # Question de suivi
         
         return 'general'
     
@@ -261,17 +272,48 @@ class SmartPharmaResponder:
             return "Les médicaments sont utilisés pour traiter diverses conditions médicales. Les indications dépendent de la classe thérapeutique du médicament. Pouvez-vous me donner le nom du médicament pour des informations plus précises ?"
     
     def _generate_interactions_response(self, message: str, drug_name: Optional[str], context: Dict) -> str:
-        """Génère une réponse sur les interactions"""
-        template = self.response_templates['interactions']['default']
+        """Génère une réponse sur les interactions - AMÉLIORÉ"""
+        message_lower = message.lower()
         
-        # Extraire les médicaments mentionnés dans la question
+        # Extraire tous les médicaments mentionnés
         mentioned_drugs = context.get('mentioned_drugs', [])
         if drug_name and drug_name not in mentioned_drugs:
             mentioned_drugs.append(drug_name)
         
+        # Extraire les médicaments de la question actuelle
+        words = re.findall(r'\b[a-zA-Zéèêëàâäôöùûüç]{4,}\b', message)
+        for word in words:
+            word_lower = word.lower()
+            if (word_lower.endswith('ine') or word_lower.endswith('ol') or 
+                word_lower.endswith('ide') or word_lower.endswith('ate') or
+                word_lower.endswith('azole') or word_lower.endswith('mycin')):
+                if word_lower not in ['dose', 'prise', 'fois'] and word.capitalize() not in mentioned_drugs:
+                    mentioned_drugs.append(word.capitalize())
+        
+        template = self.response_templates['interactions']['default']
         response = template
+        
+        # Personnaliser selon les médicaments mentionnés
         if len(mentioned_drugs) >= 2:
-            response += f"\n\n**Concernant {', '.join(mentioned_drugs)}** : Avant de prendre ces médicaments ensemble, consultez absolument un pharmacien ou un médecin pour vérifier les interactions spécifiques."
+            response += f"\n\n**⚠️ CONCERNANT {', '.join(mentioned_drugs)}** :\n\n"
+            response += "Avant de prendre ces médicaments ensemble, il est **ESSENTIEL** de :\n"
+            response += "• Consulter un pharmacien ou un médecin\n"
+            response += "• Vérifier les interactions spécifiques dans les notices\n"
+            response += "• Informer votre professionnel de santé de tous vos médicaments\n"
+            response += "• Surveiller les effets secondaires potentiels\n\n"
+            response += "**Interactions possibles :**\n"
+            response += "• Modification de l'efficacité d'un ou plusieurs médicaments\n"
+            response += "• Augmentation du risque d'effets secondaires\n"
+            response += "• Modification de l'absorption, du métabolisme, ou de l'élimination\n"
+            response += "• Création de nouveaux effets indésirables\n\n"
+            response += "**Ne prenez jamais plusieurs médicaments ensemble sans avis médical.**"
+        elif len(mentioned_drugs) == 1:
+            response += f"\n\n**Concernant {mentioned_drugs[0]}** : Pour connaître les interactions spécifiques de ce médicament, consultez la notice ou un professionnel de santé."
+        else:
+            # Extraire les médicaments de la question si possible
+            drug1 = self.extract_drug_name(message)
+            if drug1:
+                response += f"\n\n**Concernant {drug1}** : Pour vérifier les interactions de ce médicament avec d'autres, consultez la notice ou un professionnel de santé."
         
         return response
     
@@ -292,19 +334,26 @@ class SmartPharmaResponder:
             return "La sécurité des médicaments est une priorité absolue. Tous les médicaments autorisés ont été évalués pour leur sécurité et efficacité. Pour des informations spécifiques, pouvez-vous me donner le nom du médicament ?"
     
     def _generate_general_response(self, message: str, drug_name: Optional[str], context: Dict) -> str:
-        """Génère une réponse générale intelligente"""
+        """Génère une réponse générale intelligente - AMÉLIORÉ"""
         message_lower = message.lower()
+        
+        # Vérifier si c'est une question de suivi (encore, plus de détails, etc.)
+        is_follow_up = any(word in message_lower for word in ['encore', 'plus', 'détails', 'details', 'complément', 'explique', 'explain', 'détaille'])
         
         # Si un médicament est mentionné
         if drug_name:
-            return f"**{drug_name}** est un médicament utilisé dans le domaine pharmaceutique.\n\n**Je peux vous fournir des informations sur :**\n• Mécanisme d'action (comment il fonctionne)\n• Effets secondaires\n• Posologie et dosage\n• Indications thérapeutiques\n• Interactions médicamenteuses\n• Contre-indications\n• Sécurité\n\n**Quelle information souhaitez-vous sur {drug_name} ?**\n\nVous pouvez poser des questions comme :\n• \"Comment fonctionne {drug_name} ?\"\n• \"Quels sont les effets secondaires de {drug_name} ?\"\n• \"Quelle est la posologie de {drug_name} ?\""
+            if is_follow_up:
+                # Question de suivi - donner plus d'informations
+                return f"**Informations complémentaires sur {drug_name}** :\n\n**1. Mécanisme d'action :**\n{drug_name} agit selon un mécanisme spécifique à sa classe thérapeutique. Le mécanisme exact dépend de la cible moléculaire et de la voie d'action.\n\n**2. Effets secondaires :**\nLes effets secondaires peuvent inclure : troubles digestifs, réactions cutanées, maux de tête, fatigue. Les effets graves sont rares mais peuvent inclure des réactions allergiques.\n\n**3. Posologie :**\nLa posologie dépend de plusieurs facteurs : type de condition, âge, poids, fonction rénale/hépatique. La posologie exacte doit être déterminée par un professionnel de santé.\n\n**4. Indications :**\n{drug_name} est utilisé pour traiter diverses conditions selon sa classe thérapeutique.\n\n**5. Interactions :**\nDes interactions médicamenteuses sont possibles. Consultez un professionnel de santé avant de prendre {drug_name} avec d'autres médicaments.\n\n**6. Contre-indications :**\nLes contre-indications incluent : allergies, certaines conditions médicales, grossesse/allaitement (pour certains médicaments).\n\n⚠️ Pour des informations précises et personnalisées sur **{drug_name}**, consultez la notice du médicament ou un professionnel de santé."
+            else:
+                return f"**{drug_name}** est un médicament utilisé dans le domaine pharmaceutique.\n\n**Je peux vous fournir des informations détaillées sur :**\n• 🔬 **Mécanisme d'action** : Comment {drug_name} fonctionne dans l'organisme\n• ⚠️ **Effets secondaires** : Effets indésirables possibles et leur fréquence\n• 💊 **Posologie et dosage** : Comment et quand prendre {drug_name}\n• 🎯 **Indications thérapeutiques** : Pour quelles conditions {drug_name} est utilisé\n• 🔄 **Interactions médicamenteuses** : Avec quels médicaments {drug_name} peut interagir\n• 🚫 **Contre-indications** : Situations où {drug_name} ne doit pas être utilisé\n• ✅ **Sécurité** : Profil de sécurité et surveillance\n\n**Quelle information souhaitez-vous sur {drug_name} ?**\n\n**Exemples de questions :**\n• \"Comment fonctionne {drug_name} ?\"\n• \"Quels sont les effets secondaires de {drug_name} ?\"\n• \"Quelle est la posologie de {drug_name} ?\"\n• \"Pour quoi est utilisé {drug_name} ?\"\n• \"Peut-on prendre {drug_name} avec l'ibuprofène ?\""
         
         # Analyser les mots-clés pour donner une réponse contextuelle
         if any(word in message_lower for word in ['médicament', 'medicament', 'drug']):
-            return "Les **médicaments** sont des substances utilisées pour traiter, prévenir, ou diagnostiquer des maladies.\n\n**Composants :**\n• Principe actif : substance responsable de l'effet thérapeutique\n• Excipients : substances facilitant l'administration\n\n**Classification :**\n• Par classe thérapeutique (antibiotiques, anti-inflammatoires, etc.)\n• Par voie d'administration (orale, injectable, topique)\n• Par statut réglementaire (sur ordonnance, en vente libre)\n\n**Développement :**\n• Recherche et développement (10-15 ans)\n• Essais cliniques (phases I, II, III, IV)\n• Autorisation réglementaire (AMM)\n• Surveillance post-commercialisation\n\nSouhaitez-vous des informations sur un médicament spécifique ou un aspect particulier ?"
+            return "Les **médicaments** sont des substances utilisées pour traiter, prévenir, ou diagnostiquer des maladies.\n\n**Composants d'un médicament :**\n• **Principe actif** : substance responsable de l'effet thérapeutique\n• **Excipients** : substances facilitant l'administration (liants, colorants, conservateurs)\n\n**Classification des médicaments :**\n• **Par classe thérapeutique** : antibiotiques, anti-inflammatoires, analgésiques, antihypertenseurs, etc.\n• **Par voie d'administration** : orale (comprimés, gélules), injectable, topique (pommades), etc.\n• **Par statut réglementaire** : sur ordonnance, en vente libre, médicaments génériques\n\n**Développement d'un médicament :**\n• **Recherche et développement** : 10-15 ans en moyenne\n• **Essais cliniques** : phases I, II, III, IV\n• **Autorisation réglementaire** : AMM par les agences (ANSM, EMA, FDA)\n• **Surveillance post-commercialisation** : pharmacovigilance continue\n\n**Souhaitez-vous des informations sur :**\n• Un médicament spécifique ? (donnez-moi son nom)\n• Un aspect particulier ? (mécanismes, effets, posologie, etc.)\n• Le développement pharmaceutique ?\n• La réglementation ?"
         
-        # Réponse générique intelligente
-        return "Je suis un assistant spécialisé dans le domaine **pharmaceutique et de la santé (Pharma/MedTech)**.\n\n**Je peux vous aider avec :**\n• 💊 **Médicaments** : mécanismes, effets, posologie, indications, interactions\n• 🏥 **Dispositifs médicaux** : classification, réglementation\n• 🔬 **Essais cliniques** : phases, méthodologie\n• 📋 **Réglementation** : FDA, EMA, ANSM, AMM\n• ⚠️ **Pharmacovigilance** : sécurité, effets indésirables\n• 🧬 **Biotechnologie** : médicaments biologiques, biosimilaires, thérapies géniques\n\n**Comment puis-je vous aider aujourd'hui ?**\n\nPosez-moi une question spécifique, par exemple :\n• \"Comment fonctionne l'amoxicilline ?\"\n• \"Quels sont les effets secondaires de l'ibuprofène ?\"\n• \"Qu'est-ce qu'un essai clinique de phase III ?\""
+        # Réponse générique intelligente et conversationnelle
+        return "Je suis un assistant spécialisé dans le domaine **pharmaceutique et de la santé (Pharma/MedTech)**.\n\n**Je peux vous aider avec des questions sur :**\n\n💊 **Médicaments et principes actifs**\n• Mécanismes d'action, effets secondaires, posologie\n• Indications, interactions, contre-indications\n• Développement et recherche\n\n🏥 **Dispositifs médicaux (MedTech)**\n• Classification (Classe I, IIa, IIb, III)\n• Réglementation et marquage CE\n• Implants et prothèses\n\n🔬 **Essais cliniques et recherche**\n• Phases des essais (I, II, III, IV)\n• Méthodologie (randomisation, double aveugle)\n• Réglementation (ICH-GCP, FDA, EMA)\n\n📋 **Réglementation pharmaceutique**\n• Agences réglementaires (FDA, EMA, ANSM)\n• Autorisation de mise sur le marché (AMM)\n• Processus d'évaluation\n\n⚠️ **Pharmacovigilance et sécurité**\n• Surveillance des effets indésirables\n• Signalement et gestion des risques\n• Rapport bénéfice/risque\n\n🧬 **Biotechnologie pharmaceutique**\n• Médicaments biologiques et biosimilaires\n• Thérapies géniques et cellulaires\n• Innovations biotechnologiques\n\n**Comment puis-je vous aider ?**\n\nPosez-moi une question spécifique, par exemple :\n• \"Comment fonctionne l'amoxicilline ?\"\n• \"Quels sont les effets secondaires de l'ibuprofène ?\"\n• \"Qu'est-ce qu'un essai clinique de phase III ?\"\n• \"Peut-on prendre le paracétamol avec l'ibuprofène ?\"\n• \"Explique-moi la pharmacovigilance\""
     
     def _generate_comprehensive_mechanism_explanation(self) -> str:
         """Génère une explication complète des mécanismes d'action"""
