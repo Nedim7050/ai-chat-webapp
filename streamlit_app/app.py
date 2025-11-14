@@ -8,7 +8,12 @@ import torch
 from datetime import datetime
 import json
 import os
-from pharma_database import get_drug_info, generate_drug_response, PHARMA_DATABASE
+from pharma_database import (
+    get_drug_info, generate_drug_response, PHARMA_DATABASE, MEDICATIONS_DATABASE,
+    search_database, generate_domain_response,
+    MEDICAL_DEVICES_DATABASE, CLINICAL_TRIALS_DATABASE, REGULATION_DATABASE,
+    PHARMACOVIGILANCE_DATABASE, BIOTECH_DATABASE
+)
 
 # Page configuration
 st.set_page_config(
@@ -405,6 +410,7 @@ def generate_reply(pipeline_obj, message, history):
         
         # For pharma questions, ALWAYS use database/pre-defined answers first (most reliable)
         if is_pharma:
+            # First try specific drug answer
             specific_answer = get_pharma_specific_answer(message_lower)
             if specific_answer:
                 # Check if we already gave this answer
@@ -414,13 +420,26 @@ def generate_reply(pipeline_obj, message, history):
                         return "J'ai déjà répondu à cette question précédemment. Pourriez-vous poser une question différente ou plus précise sur le même sujet?"
                 return specific_answer
             
-            # If no specific answer but it's pharma, try to generate intelligent response
-            # Check if it's a general pharma question that we can answer
+            # If no specific drug answer, search in all databases
+            search_results = search_database(message_lower)
+            if search_results:
+                # Use the first relevant result
+                domain, key, data = search_results[0]
+                domain_response = generate_domain_response(message_lower, domain, data)
+                if domain_response:
+                    # Check for duplicates
+                    if history:
+                        recent_assistant_messages = [msg.get("content", "").strip() for msg in history[-5:] if msg.get("role") == "assistant"]
+                        if domain_response in recent_assistant_messages:
+                            return "J'ai déjà répondu à cette question précédemment. Pourriez-vous poser une question différente ou plus précise?"
+                    return domain_response
+            
+            # If no database match but it's pharma, try to generate intelligent response
             if any(word in message_lower for word in ['médicament', 'medicament', 'drug', 'pharmaceutique']):
                 return generate_domain_fallback(message)
             
-            # For specific drug questions not in database, try to provide helpful response
-            return f"Je comprends que vous posez une question sur un médicament ou un produit pharmaceutique. Malheureusement, je n'ai pas d'informations détaillées sur ce médicament spécifique dans ma base de données actuelle.\n\nPour obtenir des informations précises sur ce médicament, je vous recommande de :\n• Consulter la notice du médicament\n• Contacter un pharmacien ou un professionnel de santé\n• Consulter les bases de données pharmaceutiques officielles (ANSM, EMA, FDA)\n\nPouvez-vous reformuler votre question de manière plus générale sur le domaine pharmaceutique?"
+            # For specific questions not in database, provide helpful response
+            return f"Je comprends que vous posez une question sur le domaine pharmaceutique et de la santé. Malheureusement, je n'ai pas d'informations détaillées sur ce sujet spécifique dans ma base de données actuelle.\n\nPour obtenir des informations précises, je vous recommande de :\n• Consulter les notices officielles (médicaments, dispositifs médicaux)\n• Contacter un pharmacien ou un professionnel de santé\n• Consulter les bases de données officielles (ANSM, EMA, FDA)\n• Consulter les publications scientifiques spécialisées\n\nPouvez-vous reformuler votre question de manière plus générale sur le domaine pharmaceutique?"
         
         # If no pipeline (API mode), use fallback
         if pipeline_obj is None:
